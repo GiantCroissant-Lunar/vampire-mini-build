@@ -284,6 +284,74 @@ jobs:
             fi
           }
 
+      - name: Play session transcript
+        if: steps.build.outputs.result == 'success'
+        run: |
+          cd ${{ env.GAME_DIR }}
+          PLAY_SCENE="project/hosts/complete-app/Scenes/Tests/PlaySession.tscn"
+          if [ ! -f "$PLAY_SCENE" ]; then
+            echo "No PlaySession scene — skipping transcript"
+            echo "has_transcript=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Running 60s headless play session..."
+          timeout 90 godot --headless --path project/hosts/complete-app --scene res://Scenes/Tests/PlaySession.tscn 2>&1 | tee /tmp/play-session.log || {
+            EXIT_CODE=$?
+            echo "::warning::Play session exited with code $EXIT_CODE"
+          }
+          echo "has_transcript=true" >> $GITHUB_OUTPUT
+        id: transcript
+
+      - name: Post transcript to pinned issue
+        if: steps.build.outputs.result == 'success' && steps.transcript.outputs.has_transcript == 'true'
+        uses: actions/github-script@v7
+        env:
+          MERGED_BRANCHES: ${{ steps.merge.outputs.merged }}
+        with:
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || github.token }}
+          script: |
+            const fs = require('fs');
+            let transcript = '';
+            try {
+              transcript = fs.readFileSync('/tmp/play-session.log', 'utf8');
+            } catch (e) {
+              transcript = '(no transcript file generated)';
+            }
+
+            // Truncate if too long for GitHub comment
+            if (transcript.length > 60000) {
+              transcript = transcript.substring(0, 60000) + '\n\n... (truncated)';
+            }
+
+            const merged = process.env.MERGED_BRANCHES || 'unknown';
+            const now = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const body = `## Latest Gameplay Transcript
+
+**Run:** [${now}](${runUrl})
+**Branches merged:** ${merged.trim() || 'none'}
+
+<details open><summary>Play Session (60s headless)</summary>
+
+\`\`\`
+${transcript}
+\`\`\`
+
+</details>
+
+---
+> Auto-updated by integration pipeline`;
+
+            // Update pinned issue #174
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 174,
+              body: body
+            });
+
       - name: Push integration branch on success
         if: steps.build.outputs.result == 'success'
         run: |
