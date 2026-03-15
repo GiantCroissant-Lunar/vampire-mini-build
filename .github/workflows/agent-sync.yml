@@ -13,6 +13,19 @@ on:
         description: 'Task prompt for the agent'
         required: false
         default: ''
+      agent:
+        description: 'Agent to use: glm or kimi'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - glm
+          - kimi
+
+concurrency:
+  group: glm-${{ github.run_id }}
+  cancel-in-progress: false
 
 env:
   PRIVATE_REPO: "git@github.com:GiantCroissant-Lunar/vampire-mini.git"
@@ -59,29 +72,22 @@ jobs:
           cd ${{ env.GAME_DIR }}
           git checkout -b ${{ steps.branch.outputs.name }}
 
-      - name: Install OpenCode
+      - name: Select agent
+        id: agent
         run: |
-          if ! command -v opencode &> /dev/null; then
-            curl -fsSL https://opencode.ai/install | bash
+          CHOICE="${{ github.event.inputs.agent || 'auto' }}"
+          if [ "$CHOICE" = "auto" ]; then
+            # Round-robin by issue number: odd=glm, even=kimi
+            ISSUE_NUM="${{ github.event.issue.number || github.run_number }}"
+            if [ $((ISSUE_NUM % 2)) -eq 1 ]; then
+              echo "engine=glm" >> $GITHUB_OUTPUT
+            else
+              echo "engine=kimi" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "engine=$CHOICE" >> $GITHUB_OUTPUT
           fi
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Configure OpenCode
-        run: |
-          cat > "${{ env.GAME_DIR }}/opencode.json" << 'EOF'
-          {
-            "$schema": "https://opencode.ai/config.json",
-            "provider": {
-              "zai": {
-                "options": {
-                  "baseURL": "https://api.z.ai/api/coding/paas/v4",
-                  "apiKey": "{env:ZAI_API_KEY}"
-                }
-              }
-            },
-            "model": "zai/glm-4.7"
-          }
-          EOF
+          echo "Selected agent: $(cat $GITHUB_OUTPUT | grep engine)"
 
       - name: Prepare agent prompt
         id: prompt
@@ -117,20 +123,66 @@ jobs:
 
           echo "prompt_file=$PROMPT_FILE" >> $GITHUB_OUTPUT
 
-      - name: Run OpenCode agent
+      # --- GLM agent (OpenCode + GLM-4.7) ---
+      - name: Install OpenCode
+        if: steps.agent.outputs.engine == 'glm'
+        run: |
+          if ! command -v opencode &> /dev/null; then
+            curl -fsSL https://opencode.ai/install | bash
+          fi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Configure OpenCode
+        if: steps.agent.outputs.engine == 'glm'
+        run: |
+          cat > "${{ env.GAME_DIR }}/opencode.json" << 'EOF'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "provider": {
+              "zai": {
+                "options": {
+                  "baseURL": "https://api.z.ai/api/coding/paas/v4",
+                  "apiKey": "{env:ZAI_API_KEY}"
+                }
+              }
+            },
+            "model": "zai/glm-4.7"
+          }
+          EOF
+
+      - name: Run OpenCode agent (GLM-4.7)
+        if: steps.agent.outputs.engine == 'glm'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         working-directory: ${{ env.GAME_DIR }}
         run: |
           opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})"
 
+      # --- Kimi agent ---
+      - name: Install Kimi CLI
+        if: steps.agent.outputs.engine == 'kimi'
+        run: |
+          if ! command -v kimi &> /dev/null; then
+            curl -LsSf https://code.kimi.com/install.sh | bash
+          fi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Run Kimi agent
+        if: steps.agent.outputs.engine == 'kimi'
+        env:
+          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+        working-directory: ${{ env.GAME_DIR }}
+        run: |
+          kimi --quiet -p "$(cat ${{ steps.prompt.outputs.prompt_file }})"
+
+      # --- Push and report ---
       - name: Push changes to private repo
         run: |
           cd ${{ env.GAME_DIR }}
           rm -f opencode.json
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
-            git commit -m "agent: ${{ github.event.issue.title || 'manual run' }}
+            git commit -m "agent(${{ steps.agent.outputs.engine }}): ${{ github.event.issue.title || 'manual run' }}
 
           From: ${{ github.server_url }}/${{ github.repository }}/issues/${{ github.event.issue.number }}
           Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -148,15 +200,17 @@ jobs:
         env:
           BRANCH_NAME: ${{ steps.branch.outputs.name }}
           PUSH_RESULT: ${{ env.PUSH_RESULT }}
+          AGENT_ENGINE: ${{ steps.agent.outputs.engine }}
         with:
           script: |
             const result = process.env.PUSH_RESULT;
             const branch = process.env.BRANCH_NAME;
+            const engine = process.env.AGENT_ENGINE;
             let body;
             if (result === 'pushed') {
-              body = `✅ Agent work complete. Changes pushed to private repo on branch \`${branch}\`.`;
+              body = `✅ Agent (${engine}) work complete. Changes pushed to private repo on branch \`${branch}\`.`;
             } else {
-              body = `ℹ️ Agent finished but made no changes.`;
+              body = `ℹ️ Agent (${engine}) finished but made no changes.`;
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
