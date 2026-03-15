@@ -1,0 +1,10 @@
+# Godot editor cache
+.godot/
+
+# Mono/C# build artifacts
+.mono/
+*.csproj.old
+
+# OS
+Thumbs.db
+.DS_Store

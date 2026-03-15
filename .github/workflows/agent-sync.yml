@@ -1,0 +1,179 @@
+name: Agent Sync - Clone, Work, Push
+
+on:
+  issues:
+    types: [opened, labeled]
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: 'Branch name for changes'
+        required: false
+        default: 'agent/work'
+      prompt:
+        description: 'Task prompt for the agent'
+        required: false
+        default: ''
+
+env:
+  PRIVATE_REPO: "git@github.com:GiantCroissant-Lunar/vampire-mini.git"
+  GAME_DIR: "game"
+  PROJECT_PATH: "project/hosts/complete-app"
+
+jobs:
+  agent-work:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.issue.labels.*.name, 'agent')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout build repo
+        uses: actions/checkout@v4
+
+      - name: Setup SSH for private repo
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VAMPIRE_MINI_DEPLOY_KEY }}
+
+      - name: Clone private repo
+        run: |
+          git clone ${{ env.PRIVATE_REPO }} ${{ env.GAME_DIR }}
+          cd ${{ env.GAME_DIR }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine branch name
+        id: branch
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ github.event.inputs.branch_name }}" >> $GITHUB_OUTPUT
+          else
+            ISSUE_NUM=${{ github.event.issue.number }}
+            SLUG=$(echo "${{ github.event.issue.title }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | head -c 40)
+            echo "name=agent/issue-${ISSUE_NUM}-${SLUG}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create working branch
+        run: |
+          cd ${{ env.GAME_DIR }}
+          git checkout -b ${{ steps.branch.outputs.name }}
+
+      - name: Cache OpenCode binary
+        id: cache-opencode
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/opencode
+          key: opencode-linux-${{ runner.arch }}
+
+      - name: Install OpenCode
+        if: steps.cache-opencode.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://opencode.ai/install | bash
+
+      - name: Configure OpenCode
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+        run: |
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+          # Auth
+          mkdir -p "$HOME/.local/share/opencode"
+          cat > "$HOME/.local/share/opencode/auth.json" << EOF
+          {"zai":{"apiKey":"${ZAI_API_KEY}"}}
+          EOF
+
+          # Config
+          cat > "${{ env.GAME_DIR }}/opencode.json" << 'EOF'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "provider": {
+              "zai": {
+                "options": {
+                  "baseURL": "https://api.z.ai/api/coding/paas/v4"
+                }
+              }
+            },
+            "model": "zai/glm-4.7"
+          }
+          EOF
+
+      - name: Prepare agent prompt
+        id: prompt
+        run: |
+          PROMPT_FILE="${GITHUB_WORKSPACE}/agent-prompt.txt"
+
+          cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+          You are a game development agent working on a Godot 4.6 C# project.
+
+          ## Project Info
+          - Engine: Godot 4.6 with C# scripting
+          - Physics: Jolt Physics
+          - Project path: project/hosts/complete-app/
+
+          ## Guidelines
+          - Follow Godot 4.6 conventions for scenes (.tscn), resources (.tres), and C# scripts (.cs)
+          - Use Godot's C# API (GodotSharp)
+          - Place scripts in organized folders (e.g., Scripts/Player/, Scripts/Enemies/)
+          - Place scenes in organized folders (e.g., Scenes/Levels/, Scenes/UI/)
+          - Use PascalCase for C# class names and methods
+          - Use [Export] attributes for inspector-exposed properties
+
+          ## Task
+          PROMPT_HEADER
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "${{ github.event.inputs.prompt }}" >> "$PROMPT_FILE"
+          else
+            echo "Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" >> "$PROMPT_FILE"
+            echo "" >> "$PROMPT_FILE"
+            echo "${{ github.event.issue.body }}" >> "$PROMPT_FILE"
+          fi
+
+          echo "prompt_file=$PROMPT_FILE" >> $GITHUB_OUTPUT
+
+      - name: Run OpenCode agent
+        working-directory: ${{ env.GAME_DIR }}
+        run: |
+          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})"
+
+      - name: Push changes to private repo
+        run: |
+          cd ${{ env.GAME_DIR }}
+          rm -f opencode.json
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "agent: ${{ github.event.issue.title || 'manual run' }}
+
+          From: ${{ github.server_url }}/${{ github.repository }}/issues/${{ github.event.issue.number }}
+          Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            git push origin ${{ steps.branch.outputs.name }}
+            echo "PUSH_RESULT=pushed" >> $GITHUB_ENV
+            echo "Changes pushed to private repo"
+          else
+            echo "PUSH_RESULT=none" >> $GITHUB_ENV
+            echo "No changes to push"
+          fi
+
+      - name: Report back on issue
+        if: github.event_name != 'workflow_dispatch' && always()
+        uses: actions/github-script@v7
+        env:
+          BRANCH_NAME: ${{ steps.branch.outputs.name }}
+          PUSH_RESULT: ${{ env.PUSH_RESULT }}
+        with:
+          script: |
+            const result = process.env.PUSH_RESULT;
+            const branch = process.env.BRANCH_NAME;
+            let body;
+            if (result === 'pushed') {
+              body = `✅ Agent work complete. Changes pushed to private repo on branch \`${branch}\`.`;
+            } else {
+              body = `ℹ️ Agent finished but made no changes.`;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
