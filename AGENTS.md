@@ -84,11 +84,31 @@ A fourth agent (not a coding agent) acts as a task planner:
 4. Agent writes code in private repo clone
 5. Pre-commit checks: gitleaks, file size, forbidden patterns
 6. Nuke build verification (dotnet restore + build)
-7. GitVersion (semver) + git-cliff (changelog)
-8. Push branch to private repo
-9. integration.yml merges all agent/* branches
-10. If build fails → fix issue created → another agent picks it up
+7. GdUnit4 unit tests (if test files exist)
+8. GitVersion (semver) + git-cliff (changelog)
+9. Push branch to private repo
+10. integration.yml merges all agent/* branches
+11. If build/tests fail → fix issue created → another agent picks it up
 ```
+
+## Unit Testing
+
+Agents are instructed to write GdUnit4 tests for logic-heavy code. Tests live in `Scripts/Tests/<Category>/` in the private repo.
+
+**NuGet packages** (in `complete-app.csproj`):
+- `gdUnit4.api` v6.1.x — test framework API
+- `gdUnit4.test.adapter` v3.x — VSTest adapter for `dotnet test`
+
+**When agents should write tests:**
+- Pure logic: stats, calculations, state machines, data validation
+- NOT for: scene wiring, visual scripts, simple node setup
+
+## Addons
+
+| Addon | Path | Purpose |
+|-------|------|---------|
+| **Phantom Camera** | `addons/phantom_camera/` | Camera2D/3D: smooth follow, transitions, reframing (Cinemachine-like) |
+| **Phantom Camera C# Wrapper** | `addons/phantom_camera_csharp/` | Typed C# bindings for Phantom Camera |
 
 ## Concurrency
 

@@ -26,11 +26,29 @@ vampire-mini/
 ├── complete-app.sln            # Solution file
 ├── dotnet-tools.json           # Nuke global tool
 └── project/hosts/complete-app/
-    ├── complete-app.csproj     # Godot.NET.Sdk/4.6.1
+    ├── complete-app.csproj     # Godot.NET.Sdk/4.6.1 + gdUnit4.api + gdUnit4.test.adapter
     ├── project.godot           # Godot 4.6, Jolt Physics
+    ├── addons/
+    │   ├── phantom_camera/     # Phantom Camera addon (camera behaviors)
+    │   └── phantom_camera_csharp/  # C# wrapper for Phantom Camera
     ├── Scripts/                # C# scripts (by category)
+    │   └── Tests/              # GdUnit4 unit tests (mirrors Scripts/ structure)
     └── Scenes/                 # Scenes (by category)
 ```
+
+## Dependencies to Install in Private Repo
+
+### GdUnit4 (Unit Testing)
+
+Add to `complete-app.csproj`:
+```xml
+<PackageReference Include="gdUnit4.api" Version="6.1.*" />
+<PackageReference Include="gdUnit4.test.adapter" Version="3.*" />
+```
+
+### Phantom Camera
+
+Install from Godot AssetLib or clone from https://github.com/ramokz/phantom-camera into `addons/phantom_camera/`. For C# support, also install the C# wrapper addon.
 
 ## Build Repo Contents (vampire-mini-build)
 

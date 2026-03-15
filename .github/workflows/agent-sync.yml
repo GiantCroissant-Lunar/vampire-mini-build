@@ -203,6 +203,65 @@ jobs:
           - `partial class` — all Godot classes MUST be partial
           - Every class extending a Godot node must be `public partial class`
 
+          ## Unit Testing (GdUnit4)
+          The project uses GdUnit4 v6.1.x for unit testing. Write tests for logic-heavy code.
+
+          ### Test File Location
+          - Tests go in `Scripts/Tests/<Category>/` mirroring the source structure
+          - Test file naming: `<ClassName>Test.cs`
+
+          ### Test API (GdUnit4.NET)
+          ```csharp
+          using GdUnit4;
+          using static GdUnit4.Assertions;
+
+          namespace VampireMini.Tests;
+
+          [TestSuite]
+          public partial class PlayerStatsTest
+          {
+              [TestCase]
+              public void TakeDamage_ReducesHealth()
+              {
+                  var stats = new PlayerStats { MaxHealth = 100, CurrentHealth = 100 };
+                  stats.TakeDamage(25);
+                  AssertThat(stats.CurrentHealth).IsEqual(75);
+              }
+
+              [TestCase]
+              [RequireGodotRuntime]  // Add this for tests that use Godot nodes
+              public void PlayerNode_InitializesCorrectly()
+              {
+                  var player = new Node2D();
+                  AssertThat(player).IsNotNull();
+                  player.QueueFree();
+              }
+
+              [TestCase]
+              [DataPoint(nameof(DamageData))]
+              public void TakeDamage_Parameterized(int health, int damage, int expected)
+              {
+                  var stats = new PlayerStats { MaxHealth = health, CurrentHealth = health };
+                  stats.TakeDamage(damage);
+                  AssertThat(stats.CurrentHealth).IsEqual(expected);
+              }
+
+              public static IEnumerable<object[]> DamageData => new[]
+              {
+                  new object[] { 100, 30, 70 },
+                  new object[] { 50, 60, 0 },   // clamped to 0
+              };
+          }
+          ```
+
+          ### When to Write Tests
+          - Pure logic classes (stats, calculations, state machines)
+          - Resource/data classes with validation
+          - NOT needed for simple scene wiring or visual-only scripts
+
+          ## Addons Available
+          - **Phantom Camera** (`addons/phantom_camera/`): Camera2D/3D addon for smooth following, transitions, and reframing. Use `PhantomCamera2D` nodes instead of raw Camera2D manipulation when implementing camera features. C# wrapper available via `using PhantomCamera;`.
+
           ## Task
           PROMPT_HEADER
 
@@ -244,12 +303,26 @@ jobs:
           EOF
 
       - name: Run OpenCode agent (GLM-4.7)
+        id: run-glm
         if: steps.agent.outputs.engine == 'glm'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         working-directory: ${{ env.GAME_DIR }}
         run: |
-          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})"
+          AGENT_LOG=$(mktemp)
+          set +e
+          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})" 2>&1 | tee "$AGENT_LOG"
+          EXIT_CODE=$?
+          set -e
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          # Save last 50 lines of output for diagnostics
+          TAIL=$(tail -50 "$AGENT_LOG" | head -c 3000)
+          echo "log<<AGENT_LOG_EOF" >> $GITHUB_OUTPUT
+          echo "$TAIL" >> $GITHUB_OUTPUT
+          echo "AGENT_LOG_EOF" >> $GITHUB_OUTPUT
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::warning::Agent exited with code $EXIT_CODE"
+          fi
 
       # --- Qwen agent (OpenCode + Alibaba Coding Plan) ---
       - name: Configure OpenCode (Qwen)
@@ -285,12 +358,25 @@ jobs:
           EOF
 
       - name: Run OpenCode agent (Qwen)
+        id: run-qwen
         if: steps.agent.outputs.engine == 'qwen'
         env:
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
         working-directory: ${{ env.GAME_DIR }}
         run: |
-          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})"
+          AGENT_LOG=$(mktemp)
+          set +e
+          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})" 2>&1 | tee "$AGENT_LOG"
+          EXIT_CODE=$?
+          set -e
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          TAIL=$(tail -50 "$AGENT_LOG" | head -c 3000)
+          echo "log<<AGENT_LOG_EOF" >> $GITHUB_OUTPUT
+          echo "$TAIL" >> $GITHUB_OUTPUT
+          echo "AGENT_LOG_EOF" >> $GITHUB_OUTPUT
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::warning::Agent exited with code $EXIT_CODE"
+          fi
 
       # --- Kimi agent ---
       - name: Install Kimi CLI
@@ -320,16 +406,49 @@ jobs:
           EOF
 
       - name: Run Kimi agent
+        id: run-kimi
         if: steps.agent.outputs.engine == 'kimi'
         working-directory: ${{ env.GAME_DIR }}
         run: |
-          kimi --quiet -p "$(cat ${{ steps.prompt.outputs.prompt_file }})"
+          AGENT_LOG=$(mktemp)
+          set +e
+          kimi --quiet -p "$(cat ${{ steps.prompt.outputs.prompt_file }})" 2>&1 | tee "$AGENT_LOG"
+          EXIT_CODE=$?
+          set -e
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          TAIL=$(tail -50 "$AGENT_LOG" | head -c 3000)
+          echo "log<<AGENT_LOG_EOF" >> $GITHUB_OUTPUT
+          echo "$TAIL" >> $GITHUB_OUTPUT
+          echo "AGENT_LOG_EOF" >> $GITHUB_OUTPUT
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::warning::Agent exited with code $EXIT_CODE"
+          fi
 
       # --- Check if agent made changes ---
       - name: Check for agent changes
         id: changes
         run: |
           cd ${{ env.GAME_DIR }}
+
+          # Collect agent exit code from whichever agent ran
+          ENGINE="${{ steps.agent.outputs.engine }}"
+          if [ "$ENGINE" = "glm" ]; then
+            AGENT_EXIT="${{ steps.run-glm.outputs.exit_code }}"
+            AGENT_TAIL="${{ steps.run-glm.outputs.log }}"
+          elif [ "$ENGINE" = "qwen" ]; then
+            AGENT_EXIT="${{ steps.run-qwen.outputs.exit_code }}"
+            AGENT_TAIL="${{ steps.run-qwen.outputs.log }}"
+          else
+            AGENT_EXIT="${{ steps.run-kimi.outputs.exit_code }}"
+            AGENT_TAIL="${{ steps.run-kimi.outputs.log }}"
+          fi
+          echo "agent_exit=${AGENT_EXIT:-unknown}" >> $GITHUB_OUTPUT
+
+          # Save agent output tail for the report step
+          echo "agent_log<<TAIL_EOF" >> $GITHUB_OUTPUT
+          echo "${AGENT_TAIL:-<no output captured>}" >> $GITHUB_OUTPUT
+          echo "TAIL_EOF" >> $GITHUB_OUTPUT
+
           # Check for actual code changes (ignore opencode.json, .godot/, bin/, obj/)
           CHANGED=$(git status --porcelain | grep -v 'opencode.json' | grep -v '.godot/' | grep -v '/bin/' | grep -v '/obj/' || true)
           if [ -n "$CHANGED" ]; then
@@ -338,7 +457,7 @@ jobs:
             echo "$CHANGED"
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "Agent made no code changes"
+            echo "Agent made no code changes (exit code: ${AGENT_EXIT:-unknown})"
           fi
 
       # --- Pre-commit checks ---
@@ -362,6 +481,21 @@ jobs:
         run: |
           chmod +x build.sh
           ./build.sh Check --verbosity normal
+
+      # --- Unit tests (GdUnit4) ---
+      - name: Run unit tests
+        if: steps.changes.outputs.has_changes == 'true'
+        working-directory: ${{ env.GAME_DIR }}
+        run: |
+          # Only run tests if test files exist
+          if find . -path '*/Tests/*.cs' -name '*Test*.cs' | head -1 | grep -q .; then
+            dotnet test ${{ env.PROJECT_PATH }} --no-build --verbosity normal --logger "console;verbosity=detailed" || {
+              echo "::warning::Unit tests failed — see output above"
+              exit 1
+            }
+          else
+            echo "No test files found — skipping unit tests"
+          fi
 
       # --- Version and changelog ---
       - name: Generate version
@@ -437,16 +571,22 @@ jobs:
           BRANCH_NAME: ${{ steps.branch.outputs.name }}
           PUSH_RESULT: ${{ env.PUSH_RESULT }}
           AGENT_ENGINE: ${{ steps.agent.outputs.engine }}
+          AGENT_EXIT: ${{ steps.changes.outputs.agent_exit }}
+          AGENT_LOG: ${{ steps.changes.outputs.agent_log }}
         with:
           script: |
             const result = process.env.PUSH_RESULT;
             const branch = process.env.BRANCH_NAME;
             const engine = process.env.AGENT_ENGINE;
+            const exitCode = process.env.AGENT_EXIT || 'unknown';
+            const agentLog = process.env.AGENT_LOG || '';
             let body;
             if (result === 'pushed') {
               body = `✅ Agent (${engine}) work complete. Changes pushed to private repo on branch \`${branch}\`.`;
+            } else if (exitCode !== '0' && exitCode !== 'unknown') {
+              body = `❌ Agent (${engine}) failed with exit code ${exitCode} and produced no changes.\n\n<details><summary>Agent output (last 50 lines)</summary>\n\n\`\`\`\n${agentLog}\n\`\`\`\n</details>`;
             } else {
-              body = `ℹ️ Agent (${engine}) finished but made no changes.`;
+              body = `ℹ️ Agent (${engine}) finished with exit code ${exitCode} but made no changes.\n\n<details><summary>Agent output (last 50 lines)</summary>\n\n\`\`\`\n${agentLog}\n\`\`\`\n</details>`;
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner,

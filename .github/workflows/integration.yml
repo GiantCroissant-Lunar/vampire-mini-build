@@ -65,6 +65,16 @@ jobs:
           echo "=== Merged branches: $MERGED"
           echo "=== Conflict branches: $FAILED_MERGE"
 
+      - name: Install Godot 4.6.1 .NET
+        run: |
+          mkdir -p ~/.local/bin ~/.local/godot
+          curl -sSfL https://github.com/godotengine/godot/releases/download/4.6.1-stable/Godot_v4.6.1-stable_mono_linux_x86_64.zip -o /tmp/godot.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          mv /tmp/godot/Godot_v4.6.1-stable_mono_linux_x86_64/* ~/.local/godot/ || mv /tmp/godot/*/* ~/.local/godot/ || mv /tmp/godot/* ~/.local/godot/
+          GODOT_BIN=$(find ~/.local/godot -maxdepth 1 -name 'Godot_*' -type f -executable | head -1)
+          ln -sf "$GODOT_BIN" ~/.local/bin/godot
+          rm /tmp/godot.zip
+
       - name: Build check (Nuke)
         id: build
         working-directory: ${{ env.GAME_DIR }}
@@ -93,8 +103,30 @@ jobs:
             echo "BLAME_EOF" >> $GITHUB_OUTPUT
           fi
 
+      - name: Run unit tests
+        if: steps.build.outputs.result == 'success'
+        id: tests
+        working-directory: ${{ env.GAME_DIR }}
+        run: |
+          if find . -path '*/Tests/*.cs' -name '*Test*.cs' | head -1 | grep -q .; then
+            TEST_LOG=$(mktemp)
+            if dotnet test ${{ env.GAME_DIR }}/${{ env.PROJECT_PATH || 'project/hosts/complete-app' }} --no-build --verbosity normal --logger "console;verbosity=detailed" 2>&1 | tee "$TEST_LOG"; then
+              echo "result=success" >> $GITHUB_OUTPUT
+              echo "All tests passed"
+            else
+              echo "result=failure" >> $GITHUB_OUTPUT
+              FAILURES=$(grep -E "(Failed|Error)" "$TEST_LOG" | head -20)
+              echo "failures<<TEST_EOF" >> $GITHUB_OUTPUT
+              echo "$FAILURES" >> $GITHUB_OUTPUT
+              echo "TEST_EOF" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "result=skipped" >> $GITHUB_OUTPUT
+            echo "No test files found — skipping"
+          fi
+
       - name: Create fix issue on failure
-        if: steps.build.outputs.result == 'failure'
+        if: steps.build.outputs.result == 'failure' || steps.tests.outputs.result == 'failure'
         uses: actions/github-script@v7
         env:
           BUILD_ERRORS: ${{ steps.build.outputs.errors }}
