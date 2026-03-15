@@ -241,10 +241,29 @@ jobs:
         run: |
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz -C ~/.local/bin gitleaks
+          curl -sSfL https://github.com/orhun/git-cliff/releases/download/v4.4.1/git-cliff-4.4.1-x86_64-unknown-linux-gnu.tar.gz | tar xz -C ~/.local/bin --strip-components=1 git-cliff-4.4.1-x86_64-unknown-linux-gnu/git-cliff
+          dotnet tool install --global GitVersion.Tool --version 6.*
 
       - name: Run pre-commit checks
         run: |
           task check
+
+      # --- Version and changelog ---
+      - name: Generate version
+        id: version
+        run: |
+          cd ${{ env.GAME_DIR }}
+          cp "${GITHUB_WORKSPACE}/GitVersion.yml" .
+          VERSION=$(dotnet-gitversion /showvariable SemVer 2>/dev/null || echo "0.1.0")
+          echo "semver=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Generate changelog
+        run: |
+          cd ${{ env.GAME_DIR }}
+          cp "${GITHUB_WORKSPACE}/cliff.toml" .
+          git-cliff --config cliff.toml -o CHANGELOG.md || echo "# Changelog" > CHANGELOG.md
+          rm -f cliff.toml GitVersion.yml
 
       # --- Push and report ---
       - name: Push changes to private repo
@@ -255,6 +274,7 @@ jobs:
             git add -A
             git commit -m "agent(${{ steps.agent.outputs.engine }}): ${{ github.event.issue.title || 'manual run' }}
 
+          Version: ${{ steps.version.outputs.semver }}
           From: ${{ github.server_url }}/${{ github.repository }}/issues/${{ github.event.issue.number }}
           Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             git push origin ${{ steps.branch.outputs.name }}

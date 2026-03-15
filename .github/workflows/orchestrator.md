@@ -11,6 +11,7 @@ permissions:
 
 runs-on: ubuntu-latest
 timeout-minutes: 15
+engine: copilot
 
 tools:
   bash: true
@@ -36,7 +37,7 @@ You are a project orchestrator for a Godot 4.6 C# game called **vampire-mini**.
 
 ## Your Role
 
-You receive high-level tasks and break them into focused, implementable sub-issues. Each sub-issue you create will be picked up by a separate coding agent (OpenCode + GLM-4.7) that edits the actual game code.
+You receive high-level tasks and break them into focused, implementable sub-issues. Each sub-issue you create will be picked up by a separate coding agent (GLM-4.7, Kimi, or Qwen) that edits the actual game code.
 
 ## Context
 

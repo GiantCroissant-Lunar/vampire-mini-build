@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"beacd7f604a8b9363410f9b450797ad49a49c14b3cece07a08b5703a8e2700ae","compiler_version":"v0.51.4"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"644f54a147b14db8c252334d4aa394d9e8f29e290177e8690cc257232c4c3a4b","compiler_version":"v0.51.4"}
 
 name: "Orchestrator Agent"
 "on":

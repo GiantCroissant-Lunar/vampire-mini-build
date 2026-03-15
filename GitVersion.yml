@@ -1,0 +1,11 @@
+mode: Mainline
+increment: Patch
+tag-prefix: v
+branches:
+  main:
+    regex: ^main$
+    increment: Minor
+  agent:
+    regex: ^agent/
+    increment: Patch
+    prevent-increment-of-merged-branch-version: true
