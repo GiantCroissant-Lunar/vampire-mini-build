@@ -14,7 +14,7 @@ on:
         required: false
         default: ''
       agent:
-        description: 'Agent to use: glm or kimi'
+        description: 'Agent to use: glm, kimi, or qwen'
         required: false
         default: 'auto'
         type: choice
@@ -22,6 +22,7 @@ on:
           - auto
           - glm
           - kimi
+          - qwen
 
 concurrency:
   group: glm-${{ github.run_id }}
@@ -77,12 +78,15 @@ jobs:
         run: |
           CHOICE="${{ github.event.inputs.agent || 'auto' }}"
           if [ "$CHOICE" = "auto" ]; then
-            # Round-robin by issue number: odd=glm, even=kimi
+            # Round-robin by issue number: 0=kimi, 1=glm, 2=qwen
             ISSUE_NUM="${{ github.event.issue.number || github.run_number }}"
-            if [ $((ISSUE_NUM % 2)) -eq 1 ]; then
+            MOD=$((ISSUE_NUM % 3))
+            if [ "$MOD" -eq 0 ]; then
+              echo "engine=kimi" >> $GITHUB_OUTPUT
+            elif [ "$MOD" -eq 1 ]; then
               echo "engine=glm" >> $GITHUB_OUTPUT
             else
-              echo "engine=kimi" >> $GITHUB_OUTPUT
+              echo "engine=qwen" >> $GITHUB_OUTPUT
             fi
           else
             echo "engine=$CHOICE" >> $GITHUB_OUTPUT
@@ -123,16 +127,16 @@ jobs:
 
           echo "prompt_file=$PROMPT_FILE" >> $GITHUB_OUTPUT
 
-      # --- GLM agent (OpenCode + GLM-4.7) ---
+      # --- OpenCode agents (GLM + Qwen) ---
       - name: Install OpenCode
-        if: steps.agent.outputs.engine == 'glm'
+        if: steps.agent.outputs.engine == 'glm' || steps.agent.outputs.engine == 'qwen'
         run: |
           if ! command -v opencode &> /dev/null; then
             curl -fsSL https://opencode.ai/install | bash
           fi
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Configure OpenCode
+      - name: Configure OpenCode (GLM)
         if: steps.agent.outputs.engine == 'glm'
         run: |
           cat > "${{ env.GAME_DIR }}/opencode.json" << 'EOF'
@@ -154,6 +158,48 @@ jobs:
         if: steps.agent.outputs.engine == 'glm'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+        working-directory: ${{ env.GAME_DIR }}
+        run: |
+          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})"
+
+      # --- Qwen agent (OpenCode + Alibaba Coding Plan) ---
+      - name: Configure OpenCode (Qwen)
+        if: steps.agent.outputs.engine == 'qwen'
+        run: |
+          cat > "${{ env.GAME_DIR }}/opencode.json" << 'EOF'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "provider": {
+              "bailian-coding-plan": {
+                "npm": "@ai-sdk/anthropic",
+                "name": "Model Studio Coding Plan",
+                "options": {
+                  "baseURL": "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1",
+                  "apiKey": "{env:DASHSCOPE_API_KEY}"
+                },
+                "models": {
+                  "qwen3-coder-plus": {
+                    "name": "Qwen3 Coder Plus",
+                    "modalities": {
+                      "input": ["text"],
+                      "output": ["text"]
+                    },
+                    "limit": {
+                      "context": 1000000,
+                      "output": 65536
+                    }
+                  }
+                }
+              }
+            },
+            "model": "bailian-coding-plan/qwen3-coder-plus"
+          }
+          EOF
+
+      - name: Run OpenCode agent (Qwen)
+        if: steps.agent.outputs.engine == 'qwen'
+        env:
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
         working-directory: ${{ env.GAME_DIR }}
         run: |
           opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})"
