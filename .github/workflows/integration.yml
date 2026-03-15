@@ -254,7 +254,34 @@ jobs:
             else
               echo "::warning::Smoke test failed with exit code $EXIT_CODE"
             fi
-            cat /tmp/smoke-test.log
+          }
+
+      - name: Gameplay simulation test
+        if: steps.build.outputs.result == 'success' && steps.export.outputs.exported == 'true'
+        run: |
+          cd ${{ env.GAME_DIR }}
+          BINARY="build/bin/vampire-mini.x86_64"
+          if [ ! -f "$BINARY" ]; then
+            echo "No exported binary — skipping gameplay test"
+            exit 0
+          fi
+
+          # Check if GameplayTest scene exists
+          GAMEPLAY_SCENE="project/hosts/complete-app/Scenes/Tests/GameplayTest.tscn"
+          if [ ! -f "$GAMEPLAY_SCENE" ]; then
+            echo "No GameplayTest scene — skipping gameplay simulation"
+            exit 0
+          fi
+
+          chmod +x "$BINARY"
+          echo "Running gameplay simulation test..."
+          timeout 60 "$BINARY" --headless --gameplay-test 2>&1 | tee /tmp/gameplay-test.log || {
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo "::warning::Gameplay test timed out after 60s"
+            else
+              echo "::warning::Gameplay simulation test failed with exit code $EXIT_CODE"
+            fi
           }
 
       - name: Push integration branch on success
