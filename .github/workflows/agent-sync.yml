@@ -251,7 +251,7 @@ jobs:
         run: |
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz -C ~/.local/bin gitleaks
-          curl -sSfL https://github.com/orhun/git-cliff/releases/download/v4.4.1/git-cliff-4.4.1-x86_64-unknown-linux-gnu.tar.gz | tar xz -C ~/.local/bin --strip-components=1 git-cliff-4.4.1-x86_64-unknown-linux-gnu/git-cliff
+          curl -sSfL https://github.com/orhun/git-cliff/releases/download/v2.12.0/git-cliff-2.12.0-x86_64-unknown-linux-gnu.tar.gz | tar xz -C ~/.local/bin --strip-components=1 git-cliff-2.12.0/git-cliff
           dotnet tool install --global GitVersion.Tool --version 6.*
 
       - name: Run pre-commit checks
