@@ -204,7 +204,7 @@ jobs:
           - Every class extending a Godot node must be `public partial class`
 
           ## Unit Testing (GdUnit4)
-          The project uses GdUnit4 v6.1.x for unit testing. Write tests for logic-heavy code.
+          The project may use GdUnit4 v6.1.x for unit testing. IMPORTANT: Only write test files if the `complete-app.csproj` already contains a `PackageReference` for `gdUnit4.api`. If it does not, do NOT create any test files — they will fail to compile. Check the csproj first before writing tests.
 
           ### Test File Location
           - Tests go in `Scripts/Tests/<Category>/` mirroring the source structure
@@ -574,21 +574,28 @@ jobs:
           PUSH_RESULT: ${{ env.PUSH_RESULT }}
           AGENT_ENGINE: ${{ steps.agent.outputs.engine }}
           AGENT_EXIT: ${{ steps.changes.outputs.agent_exit }}
+          HAS_CHANGES: ${{ steps.changes.outputs.has_changes }}
           AGENT_LOG: ${{ steps.agent-log.outputs.log }}
+          JOB_STATUS: ${{ job.status }}
         with:
           script: |
             const result = process.env.PUSH_RESULT;
             const branch = process.env.BRANCH_NAME;
             const engine = process.env.AGENT_ENGINE;
             const exitCode = process.env.AGENT_EXIT || 'unknown';
+            const hasChanges = process.env.HAS_CHANGES;
             const agentLog = (process.env.AGENT_LOG || '').trim();
+            const jobStatus = process.env.JOB_STATUS;
             let body;
             if (result === 'pushed') {
               body = `✅ Agent (${engine}) work complete. Changes pushed to private repo on branch \`${branch}\`.`;
+            } else if (hasChanges === 'true' && result !== 'pushed') {
+              // Agent wrote code but a later step (build, pre-commit) failed
+              body = `🔨 Agent (${engine}) wrote code but **build/checks failed**. Changes were not pushed.\n\nThe agent produced file changes but they did not pass compilation or pre-commit checks. Check the [workflow run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions) for build errors.\n\n<details><summary>Agent output (last 50 lines)</summary>\n\n\`\`\`\n${agentLog}\n\`\`\`\n</details>`;
             } else if (exitCode !== '0' && exitCode !== 'unknown') {
-              body = `❌ Agent (${engine}) failed with exit code ${exitCode} and produced no changes.\n\n<details><summary>Agent output (last 50 lines)</summary>\n\n\`\`\`\n${agentLog}\n\`\`\`\n</details>`;
+              body = `❌ Agent (${engine}) crashed with exit code ${exitCode}.\n\n<details><summary>Agent output (last 50 lines)</summary>\n\n\`\`\`\n${agentLog}\n\`\`\`\n</details>`;
             } else {
-              body = `ℹ️ Agent (${engine}) finished with exit code ${exitCode} but made no changes.\n\n<details><summary>Agent output (last 50 lines)</summary>\n\n\`\`\`\n${agentLog}\n\`\`\`\n</details>`;
+              body = `ℹ️ Agent (${engine}) ran (exit code ${exitCode}) but produced no file changes.\n\n<details><summary>Agent output (last 50 lines)</summary>\n\n\`\`\`\n${agentLog}\n\`\`\`\n</details>`;
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
