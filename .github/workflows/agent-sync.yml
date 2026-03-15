@@ -167,11 +167,26 @@ jobs:
           fi
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+      - name: Configure Kimi
+        if: steps.agent.outputs.engine == 'kimi'
+        run: |
+          mkdir -p ~/.kimi
+          cat > ~/.kimi/config.toml << EOF
+          default_model = "kimi-for-coding"
+
+          [providers.kimi]
+          type = "kimi"
+          base_url = "https://api.kimi.com/coding/v1"
+          api_key = "${{ secrets.KIMI_API_KEY }}"
+
+          [models.kimi-for-coding]
+          provider = "kimi"
+          model = "kimi-for-coding"
+          max_context_size = 131072
+          EOF
+
       - name: Run Kimi agent
         if: steps.agent.outputs.engine == 'kimi'
-        env:
-          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
-          KIMI_MODEL_NAME: kimi-for-coding
         working-directory: ${{ env.GAME_DIR }}
         run: |
           kimi --quiet -p "$(cat ${{ steps.prompt.outputs.prompt_file }})"
