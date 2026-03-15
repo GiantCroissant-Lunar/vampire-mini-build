@@ -266,11 +266,16 @@ jobs:
           PROMPT_HEADER
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "${{ github.event.inputs.prompt }}" >> "$PROMPT_FILE"
+            cat >> "$PROMPT_FILE" << '__AGENT_TASK_BODY__'
+          ${{ github.event.inputs.prompt }}
+          __AGENT_TASK_BODY__
           else
             echo "Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" >> "$PROMPT_FILE"
             echo "" >> "$PROMPT_FILE"
-            echo "${{ github.event.issue.body }}" >> "$PROMPT_FILE"
+            # Use heredoc to avoid shell expansion of code/XML in issue body
+            cat >> "$PROMPT_FILE" << '__AGENT_TASK_BODY__'
+          ${{ github.event.issue.body }}
+          __AGENT_TASK_BODY__
           fi
 
           echo "prompt_file=$PROMPT_FILE" >> $GITHUB_OUTPUT
