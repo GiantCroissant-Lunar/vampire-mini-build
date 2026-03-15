@@ -1,0 +1,85 @@
+name: Unblock Pending Agent Issues
+
+on:
+  issues:
+    types: [closed]
+
+jobs:
+  unblock:
+    if: contains(github.event.issue.labels.*.name, 'agent')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Find and unblock dependent issues
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || github.token }}
+          script: |
+            const closedIssueNumber = context.issue.number;
+            console.log(`Issue #${closedIssueNumber} closed, checking for blocked issues...`);
+
+            // Find open issues with agent-pending label
+            const pendingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'agent-pending',
+              state: 'open',
+              per_page: 50
+            });
+
+            for (const issue of pendingIssues.data) {
+              const body = issue.body || '';
+              // Check if this issue is blocked by the closed issue
+              const blockedByPattern = new RegExp(`#${closedIssueNumber}\\b`);
+              if (body.includes('Blocked By') && blockedByPattern.test(body)) {
+                console.log(`Issue #${issue.number} was blocked by #${closedIssueNumber}`);
+
+                // Check if ALL blockers are resolved
+                const blockerRefs = body.match(/#(\d+)/g) || [];
+                const blockerSection = body.split('Blocked By')[1]?.split('##')[0] || '';
+                const blockerNumbers = (blockerSection.match(/#(\d+)/g) || [])
+                  .map(ref => parseInt(ref.slice(1)));
+
+                let allResolved = true;
+                for (const num of blockerNumbers) {
+                  if (num === closedIssueNumber) continue;
+                  const { data: blocker } = await github.rest.issues.get({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: num
+                  });
+                  if (blocker.state !== 'closed') {
+                    console.log(`  Still blocked by open issue #${num}`);
+                    allResolved = false;
+                    break;
+                  }
+                }
+
+                if (allResolved) {
+                  console.log(`  All blockers resolved — adding 'agent' label to #${issue.number}`);
+
+                  // Remove agent-pending, add agent
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    name: 'agent-pending'
+                  }).catch(() => {});
+
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    labels: ['agent']
+                  });
+
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    body: `🔓 Unblocked — all dependencies resolved (last: #${closedIssueNumber}). Agent work starting.`
+                  });
+                }
+              }
+            }
