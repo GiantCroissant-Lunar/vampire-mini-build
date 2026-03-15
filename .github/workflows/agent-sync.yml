@@ -236,6 +236,16 @@ jobs:
         run: |
           kimi --quiet -p "$(cat ${{ steps.prompt.outputs.prompt_file }})"
 
+      # --- Pre-commit checks ---
+      - name: Install check tools
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz -C ~/.local/bin gitleaks
+
+      - name: Run pre-commit checks
+        run: |
+          task check
+
       # --- Push and report ---
       - name: Push changes to private repo
         run: |

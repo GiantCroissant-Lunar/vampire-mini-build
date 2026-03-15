@@ -1,0 +1,91 @@
+version: '3'
+
+vars:
+  GAME_DIR: '{{.GAME_DIR | default "game"}}'
+  PROJECT_PATH: '{{.GAME_DIR}}/project/hosts/complete-app'
+
+tasks:
+  check:
+    desc: Run all pre-commit checks
+    cmds:
+      - task: secrets
+      - task: filesize
+      - task: patterns
+      - task: filenames
+
+  secrets:
+    desc: Scan for leaked secrets
+    cmds:
+      - |
+        echo "=== Secret scanning ==="
+        gitleaks detect --source {{.GAME_DIR}} --no-git --verbose --exit-code 1
+
+  filesize:
+    desc: Reject files larger than 5MB (catches accidental binary commits)
+    cmds:
+      - |
+        echo "=== File size check (max 5MB) ==="
+        FAILED=0
+        while IFS= read -r file; do
+          SIZE=$(stat --printf='%s' "$file" 2>/dev/null || stat -f '%z' "$file" 2>/dev/null)
+          if [ "$SIZE" -gt 5242880 ]; then
+            echo "FAIL: $file is $(( SIZE / 1048576 ))MB (limit 5MB)"
+            FAILED=1
+          fi
+        done < <(find {{.GAME_DIR}} -type f -not -path '*/.git/*')
+        if [ "$FAILED" -eq 1 ]; then exit 1; fi
+        echo "OK: All files under 5MB"
+
+  patterns:
+    desc: Check for forbidden patterns in source files
+    cmds:
+      - |
+        echo "=== Forbidden pattern check ==="
+        FAILED=0
+        PATTERNS=(
+          'sk-[a-zA-Z0-9_-]{20,}'
+          'ghp_[a-zA-Z0-9]{36}'
+          'github_pat_[a-zA-Z0-9_]{80,}'
+          'PRIVATE.KEY'
+          'BEGIN RSA PRIVATE KEY'
+          'BEGIN OPENSSH PRIVATE KEY'
+          'password\s*=\s*"[^"]{8,}"'
+          'api[_-]?key\s*=\s*"[^"]{8,}"'
+        )
+        for pattern in "${PATTERNS[@]}"; do
+          MATCHES=$(grep -rnE "$pattern" {{.GAME_DIR}} \
+            --include='*.cs' --include='*.tscn' --include='*.tres' \
+            --include='*.json' --include='*.cfg' --include='*.toml' \
+            --include='*.yml' --include='*.yaml' --include='*.md' \
+            --include='*.txt' --include='*.xml' \
+            2>/dev/null || true)
+          if [ -n "$MATCHES" ]; then
+            echo "FAIL: Found pattern '$pattern':"
+            echo "$MATCHES"
+            FAILED=1
+          fi
+        done
+        if [ "$FAILED" -eq 1 ]; then exit 1; fi
+        echo "OK: No forbidden patterns found"
+
+  filenames:
+    desc: Check for suspicious filenames
+    cmds:
+      - |
+        echo "=== Suspicious filename check ==="
+        FAILED=0
+        BAD_FILES=$(find {{.GAME_DIR}} -type f \
+          \( -name '.env' -o -name '.env.*' \
+             -o -name 'credentials.json' \
+             -o -name 'service-account*.json' \
+             -o -name '*.pem' -o -name '*.key' \
+             -o -name 'id_rsa' -o -name 'id_ed25519' \
+             -o -name '*.p12' -o -name '*.pfx' \
+          \) -not -path '*/.git/*' 2>/dev/null || true)
+        if [ -n "$BAD_FILES" ]; then
+          echo "FAIL: Suspicious files found:"
+          echo "$BAD_FILES"
+          FAILED=1
+        fi
+        if [ "$FAILED" -eq 1 ]; then exit 1; fi
+        echo "OK: No suspicious filenames"
