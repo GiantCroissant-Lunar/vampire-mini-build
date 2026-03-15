@@ -309,17 +309,11 @@ jobs:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         working-directory: ${{ env.GAME_DIR }}
         run: |
-          AGENT_LOG=$(mktemp)
           set +e
-          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})" 2>&1 | tee "$AGENT_LOG"
+          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})" 2>&1 | tee /tmp/agent-output.log
           EXIT_CODE=$?
           set -e
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
-          # Save last 50 lines of output for diagnostics
-          TAIL=$(tail -50 "$AGENT_LOG" | head -c 3000)
-          echo "log<<AGENT_LOG_EOF" >> $GITHUB_OUTPUT
-          echo "$TAIL" >> $GITHUB_OUTPUT
-          echo "AGENT_LOG_EOF" >> $GITHUB_OUTPUT
           if [ $EXIT_CODE -ne 0 ]; then
             echo "::warning::Agent exited with code $EXIT_CODE"
           fi
@@ -364,16 +358,11 @@ jobs:
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
         working-directory: ${{ env.GAME_DIR }}
         run: |
-          AGENT_LOG=$(mktemp)
           set +e
-          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})" 2>&1 | tee "$AGENT_LOG"
+          opencode run "$(cat ${{ steps.prompt.outputs.prompt_file }})" 2>&1 | tee /tmp/agent-output.log
           EXIT_CODE=$?
           set -e
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
-          TAIL=$(tail -50 "$AGENT_LOG" | head -c 3000)
-          echo "log<<AGENT_LOG_EOF" >> $GITHUB_OUTPUT
-          echo "$TAIL" >> $GITHUB_OUTPUT
-          echo "AGENT_LOG_EOF" >> $GITHUB_OUTPUT
           if [ $EXIT_CODE -ne 0 ]; then
             echo "::warning::Agent exited with code $EXIT_CODE"
           fi
@@ -410,16 +399,11 @@ jobs:
         if: steps.agent.outputs.engine == 'kimi'
         working-directory: ${{ env.GAME_DIR }}
         run: |
-          AGENT_LOG=$(mktemp)
           set +e
-          kimi --quiet -p "$(cat ${{ steps.prompt.outputs.prompt_file }})" 2>&1 | tee "$AGENT_LOG"
+          kimi --quiet -p "$(cat ${{ steps.prompt.outputs.prompt_file }})" 2>&1 | tee /tmp/agent-output.log
           EXIT_CODE=$?
           set -e
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
-          TAIL=$(tail -50 "$AGENT_LOG" | head -c 3000)
-          echo "log<<AGENT_LOG_EOF" >> $GITHUB_OUTPUT
-          echo "$TAIL" >> $GITHUB_OUTPUT
-          echo "AGENT_LOG_EOF" >> $GITHUB_OUTPUT
           if [ $EXIT_CODE -ne 0 ]; then
             echo "::warning::Agent exited with code $EXIT_CODE"
           fi
@@ -434,20 +418,19 @@ jobs:
           ENGINE="${{ steps.agent.outputs.engine }}"
           if [ "$ENGINE" = "glm" ]; then
             AGENT_EXIT="${{ steps.run-glm.outputs.exit_code }}"
-            AGENT_TAIL="${{ steps.run-glm.outputs.log }}"
           elif [ "$ENGINE" = "qwen" ]; then
             AGENT_EXIT="${{ steps.run-qwen.outputs.exit_code }}"
-            AGENT_TAIL="${{ steps.run-qwen.outputs.log }}"
           else
             AGENT_EXIT="${{ steps.run-kimi.outputs.exit_code }}"
-            AGENT_TAIL="${{ steps.run-kimi.outputs.log }}"
           fi
           echo "agent_exit=${AGENT_EXIT:-unknown}" >> $GITHUB_OUTPUT
 
-          # Save agent output tail for the report step
-          echo "agent_log<<TAIL_EOF" >> $GITHUB_OUTPUT
-          echo "${AGENT_TAIL:-<no output captured>}" >> $GITHUB_OUTPUT
-          echo "TAIL_EOF" >> $GITHUB_OUTPUT
+          # Save agent log to file (avoid shell expansion of code in output)
+          if [ -f /tmp/agent-output.log ]; then
+            tail -50 /tmp/agent-output.log | head -c 3000 > /tmp/agent-tail.log
+          else
+            echo "<no output captured>" > /tmp/agent-tail.log
+          fi
 
           # Check for actual code changes (ignore opencode.json, .godot/, bin/, obj/)
           CHANGED=$(git status --porcelain | grep -v 'opencode.json' | grep -v '.godot/' | grep -v '/bin/' | grep -v '/obj/' || true)
@@ -564,6 +547,20 @@ jobs:
             echo "No changes to push"
           fi
 
+      - name: Read agent log for report
+        if: github.event_name != 'workflow_dispatch' && always()
+        id: agent-log
+        run: |
+          # Read agent tail log safely into an environment file (avoids shell expansion)
+          if [ -f /tmp/agent-tail.log ]; then
+            echo "log<<AGENT_LOG_EOF" >> $GITHUB_OUTPUT
+            cat /tmp/agent-tail.log >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "AGENT_LOG_EOF" >> $GITHUB_OUTPUT
+          else
+            echo "log=<no output captured>" >> $GITHUB_OUTPUT
+          fi
+
       - name: Report back on issue
         if: github.event_name != 'workflow_dispatch' && always()
         uses: actions/github-script@v7
@@ -572,14 +569,14 @@ jobs:
           PUSH_RESULT: ${{ env.PUSH_RESULT }}
           AGENT_ENGINE: ${{ steps.agent.outputs.engine }}
           AGENT_EXIT: ${{ steps.changes.outputs.agent_exit }}
-          AGENT_LOG: ${{ steps.changes.outputs.agent_log }}
+          AGENT_LOG: ${{ steps.agent-log.outputs.log }}
         with:
           script: |
             const result = process.env.PUSH_RESULT;
             const branch = process.env.BRANCH_NAME;
             const engine = process.env.AGENT_ENGINE;
             const exitCode = process.env.AGENT_EXIT || 'unknown';
-            const agentLog = process.env.AGENT_LOG || '';
+            const agentLog = (process.env.AGENT_LOG || '').trim();
             let body;
             if (result === 'pushed') {
               body = `✅ Agent (${engine}) work complete. Changes pushed to private repo on branch \`${branch}\`.`;
