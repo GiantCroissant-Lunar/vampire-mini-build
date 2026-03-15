@@ -248,6 +248,17 @@ jobs:
         run: |
           task check
 
+      # --- Build verification (Nuke) ---
+      - name: Restore dotnet tools
+        working-directory: ${{ env.GAME_DIR }}
+        run: |
+          dotnet tool restore
+
+      - name: Build check
+        working-directory: ${{ env.GAME_DIR }}
+        run: |
+          dotnet nuke Check --verbosity normal
+
       # --- Version and changelog ---
       - name: Generate version
         id: version
