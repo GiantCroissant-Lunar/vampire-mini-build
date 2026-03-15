@@ -84,6 +84,15 @@ jobs:
         run: |
           cd ${{ env.GAME_DIR }}
           BRANCH="${{ steps.branch.outputs.name }}"
+
+          # Ensure root .gitignore excludes build artifacts
+          cat >> .gitignore << 'GITIGNORE'
+          # Build artifacts
+          build/bin/
+          build/obj/
+          .nuke/temp/
+          GITIGNORE
+
           # If the branch already exists on remote, check it out and rebase on main
           if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
             echo "Branch $BRANCH already exists on remote — checking out and rebasing"
@@ -93,6 +102,7 @@ jobs:
           else
             git checkout -b "$BRANCH"
           fi
+          echo "On branch: $(git branch --show-current)"
 
       - name: Select agent
         id: agent
@@ -380,7 +390,18 @@ jobs:
         if: steps.changes.outputs.has_changes == 'true'
         run: |
           cd ${{ env.GAME_DIR }}
+          BRANCH="${{ steps.branch.outputs.name }}"
           rm -f opencode.json
+
+          # Ensure we're on the correct branch (build steps may have changed HEAD)
+          CURRENT=$(git branch --show-current)
+          if [ "$CURRENT" != "$BRANCH" ]; then
+            echo "WARNING: HEAD was on '$CURRENT', switching to '$BRANCH'"
+            git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH"
+          fi
+
+          echo "Current branch: $(git branch --show-current)"
+
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
             git commit -m "agent(${{ steps.agent.outputs.engine }}): ${{ github.event.issue.title || 'manual run' }}
@@ -388,9 +409,22 @@ jobs:
           Version: ${{ steps.version.outputs.semver }}
           From: ${{ github.server_url }}/${{ github.repository }}/issues/${{ github.event.issue.number }}
           Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            git push --force-with-lease origin ${{ steps.branch.outputs.name }}
+
+            echo "Commit SHA: $(git rev-parse HEAD)"
+            echo "Pushing to branch: $BRANCH"
+            git push --force-with-lease origin "$BRANCH"
             echo "PUSH_RESULT=pushed" >> $GITHUB_ENV
             echo "Changes pushed to private repo"
+
+            # Verify push
+            REMOTE_SHA=$(git ls-remote origin "$BRANCH" | cut -f1)
+            LOCAL_SHA=$(git rev-parse HEAD)
+            if [ "$REMOTE_SHA" = "$LOCAL_SHA" ]; then
+              echo "Push verified: remote SHA matches local"
+            else
+              echo "ERROR: Push verification failed! Remote=$REMOTE_SHA Local=$LOCAL_SHA"
+              exit 1
+            fi
           else
             echo "PUSH_RESULT=none" >> $GITHUB_ENV
             echo "No changes to push"
