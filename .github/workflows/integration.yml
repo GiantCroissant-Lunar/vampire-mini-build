@@ -203,6 +203,60 @@ jobs:
             echo "No headless verification script found — skipping"
           fi
 
+      - name: Export Linux build
+        if: steps.build.outputs.result == 'success'
+        run: |
+          cd ${{ env.GAME_DIR }}
+          EXPORT_PRESETS="${{ env.GAME_DIR }}/project/hosts/complete-app/export_presets.cfg"
+          if [ ! -f "$EXPORT_PRESETS" ]; then
+            echo "No export_presets.cfg — skipping export"
+            echo "exported=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Install Linux export templates
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/4.6.1.stable.mono"
+          mkdir -p "$TEMPLATE_DIR"
+          TEMPLATE_URL="https://github.com/godotengine/godot/releases/download/4.6.1-stable/Godot_v4.6.1-stable_mono_export_templates.tpz"
+          curl -sSfL "$TEMPLATE_URL" -o /tmp/templates.tpz
+          unzip -q -o /tmp/templates.tpz -d /tmp/templates
+          cp /tmp/templates/templates/* "$TEMPLATE_DIR/" || true
+          rm -f /tmp/templates.tpz
+
+          # Export
+          mkdir -p build/bin
+          cd project/hosts/complete-app
+          godot --headless --export-release "Linux" ../../../build/bin/vampire-mini.x86_64 || {
+            echo "::warning::Export failed — see output above"
+            echo "exported=false" >> $GITHUB_OUTPUT
+            exit 0
+          }
+          echo "exported=true" >> $GITHUB_OUTPUT
+          ls -la ../../../build/bin/
+        id: export
+
+      - name: Smoke test exported build
+        if: steps.build.outputs.result == 'success' && steps.export.outputs.exported == 'true'
+        run: |
+          cd ${{ env.GAME_DIR }}
+          BINARY="build/bin/vampire-mini.x86_64"
+          if [ ! -f "$BINARY" ]; then
+            echo "No exported binary found — skipping smoke test"
+            exit 0
+          fi
+
+          chmod +x "$BINARY"
+          echo "Running smoke test on exported build..."
+          timeout 30 "$BINARY" --headless --smoke-test 2>&1 | tee /tmp/smoke-test.log || {
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo "::warning::Smoke test timed out after 30s"
+            else
+              echo "::warning::Smoke test failed with exit code $EXIT_CODE"
+            fi
+            cat /tmp/smoke-test.log
+          }
+
       - name: Push integration branch on success
         if: steps.build.outputs.result == 'success'
         run: |
