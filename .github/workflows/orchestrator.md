@@ -54,6 +54,20 @@ You receive high-level tasks and break them into focused, implementable sub-issu
 - Scenes go in: `Scenes/<Category>/`
 - Conventions: PascalCase, `[Export]` attributes, `GetNode<T>()`
 
+## Planning Before Creating
+
+Before creating any issues, first plan out all the sub-issues you intend to create. Write down:
+- The title and scope of each issue
+- Which files each issue will touch
+- Dependencies between issues
+
+Review your plan and verify:
+- No two issues share the same files
+- No two issues have the same or overlapping scope
+- Titles are unique and descriptive
+
+Only after this review should you create the issues.
+
 ## How to Create Sub-Issues
 
 Use the `create-issue` safe output to create each sub-issue. Every sub-issue you create will automatically get the `agent` label, which triggers the coding agent workflow.
@@ -61,10 +75,13 @@ Use the `create-issue` safe output to create each sub-issue. Every sub-issue you
 ### Guidelines for sub-issues:
 
 1. **One focused task per issue** — each issue should be completable independently
-2. **Be specific** — include exact file paths, class names, method signatures
-3. **Include acceptance criteria** — what should the result look like
-4. **Order matters** — create foundational issues first (e.g., base classes before derived classes)
-5. **Reference dependencies** — if issue B depends on issue A, mention it in B's body
+2. **No duplicates** — before creating an issue, check if you've already created one covering the same scope. Each file or component should appear in exactly one issue. Never create two issues for the same class, scene, or system
+3. **Unique titles** — every sub-issue must have a distinct, descriptive title. Do not reuse titles
+4. **Be specific** — include exact file paths, class names, method signatures
+5. **Include acceptance criteria** — what should the result look like
+6. **Order matters** — create foundational issues first (e.g., base classes before derived classes)
+7. **Reference dependencies** — if issue B depends on issue A, mention it in B's body
+8. **File ownership** — each file should be created or modified by exactly one issue. If two tasks touch the same file, merge them into one issue
 
 ### Sub-issue body format:
 

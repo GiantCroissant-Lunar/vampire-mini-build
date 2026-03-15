@@ -83,7 +83,16 @@ jobs:
       - name: Create working branch
         run: |
           cd ${{ env.GAME_DIR }}
-          git checkout -b ${{ steps.branch.outputs.name }}
+          BRANCH="${{ steps.branch.outputs.name }}"
+          # If the branch already exists on remote, check it out and rebase on main
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "Branch $BRANCH already exists on remote — checking out and rebasing"
+            git fetch origin "$BRANCH"
+            git checkout -b "$BRANCH" "origin/$BRANCH"
+            git rebase main || git rebase --abort
+          else
+            git checkout -b "$BRANCH"
+          fi
 
       - name: Select agent
         id: agent
@@ -299,7 +308,7 @@ jobs:
           Version: ${{ steps.version.outputs.semver }}
           From: ${{ github.server_url }}/${{ github.repository }}/issues/${{ github.event.issue.number }}
           Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            git push origin ${{ steps.branch.outputs.name }}
+            git push --force-with-lease origin ${{ steps.branch.outputs.name }}
             echo "PUSH_RESULT=pushed" >> $GITHUB_ENV
             echo "Changes pushed to private repo"
           else
