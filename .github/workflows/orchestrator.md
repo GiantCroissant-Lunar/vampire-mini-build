@@ -25,6 +25,8 @@ safe-outputs:
     labels: [agent]
     max: 10
     expires: 30
+  update-issue:
+    max: 1
 
 network:
   allowed: [defaults]
@@ -84,7 +86,9 @@ Use the `create-issue` safe output to create each sub-issue. Every sub-issue you
 
 ## After Creating Sub-Issues
 
-Use the `add-comment` safe output on the original issue to summarize:
-- How many sub-issues were created
-- The breakdown and ordering
-- Any notes about dependencies between tasks
+1. Use the `add-comment` safe output on the original issue to summarize:
+   - How many sub-issues were created
+   - The breakdown and ordering
+   - Any notes about dependencies between tasks
+
+2. Close the original plan issue using the `update-issue` safe output — set the state to `closed` with reason `completed`. Your work is done once sub-issues are created.
