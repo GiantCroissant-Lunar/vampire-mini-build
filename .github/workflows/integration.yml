@@ -1,0 +1,150 @@
+name: Integration Build
+
+on:
+  workflow_run:
+    workflows: ["Agent Sync - Clone, Work, Push"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: integration
+  cancel-in-progress: true
+
+env:
+  PRIVATE_REPO: "git@github.com:GiantCroissant-Lunar/vampire-mini.git"
+  GAME_DIR: "game"
+
+jobs:
+  integration:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout build repo
+        uses: actions/checkout@v4
+
+      - name: Setup SSH for private repo
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VAMPIRE_MINI_DEPLOY_KEY }}
+
+      - name: Clone private repo
+        run: |
+          git clone ${{ env.PRIVATE_REPO }} ${{ env.GAME_DIR }}
+          cd ${{ env.GAME_DIR }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge all agent branches
+        id: merge
+        run: |
+          cd ${{ env.GAME_DIR }}
+          git checkout -b integration/latest main
+
+          MERGED=""
+          FAILED_MERGE=""
+          for branch in $(git branch -r | grep 'origin/agent/' | sed 's/origin\///'); do
+            echo "--- Merging $branch ---"
+            if git merge "origin/$branch" --no-edit -m "merge: $branch"; then
+              MERGED="$MERGED $branch"
+              echo "OK: $branch merged"
+            else
+              git merge --abort
+              FAILED_MERGE="$FAILED_MERGE $branch"
+              echo "CONFLICT: $branch skipped (merge conflict)"
+            fi
+          done
+
+          echo "merged=$MERGED" >> $GITHUB_OUTPUT
+          echo "conflicts=$FAILED_MERGE" >> $GITHUB_OUTPUT
+          echo ""
+          echo "=== Merged branches: $MERGED"
+          echo "=== Conflict branches: $FAILED_MERGE"
+
+      - name: Build check (Nuke)
+        id: build
+        working-directory: ${{ env.GAME_DIR }}
+        run: |
+          chmod +x build.sh
+          BUILD_LOG=$(mktemp)
+          if ./build.sh Check --verbosity normal 2>&1 | tee "$BUILD_LOG"; then
+            echo "result=success" >> $GITHUB_OUTPUT
+            echo "Integration build passed!"
+          else
+            echo "result=failure" >> $GITHUB_OUTPUT
+            # Extract compiler errors and find which branch introduced each file
+            ERRORS=$(grep "error CS" "$BUILD_LOG" | head -20)
+            echo "errors<<ERRORS_EOF" >> $GITHUB_OUTPUT
+            echo "$ERRORS" >> $GITHUB_OUTPUT
+            echo "ERRORS_EOF" >> $GITHUB_OUTPUT
+
+            # Blame: find which branch introduced each failing file
+            BLAME=""
+            for file in $(grep "error CS" "$BUILD_LOG" | grep -oP '[^ ]+\.cs' | sort -u); do
+              BRANCH=$(git log --all --diff-filter=A --format='%D' -- "$file" 2>/dev/null | grep -oP 'origin/agent/[^ ,]+' | head -1)
+              BLAME="$BLAME\n- \`$file\` ← $BRANCH"
+            done
+            echo "blame<<BLAME_EOF" >> $GITHUB_OUTPUT
+            echo -e "$BLAME" >> $GITHUB_OUTPUT
+            echo "BLAME_EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create fix issue on failure
+        if: steps.build.outputs.result == 'failure'
+        uses: actions/github-script@v7
+        env:
+          BUILD_ERRORS: ${{ steps.build.outputs.errors }}
+          BLAME: ${{ steps.build.outputs.blame }}
+          MERGED: ${{ steps.merge.outputs.merged }}
+          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+        with:
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || github.token }}
+          script: |
+            const errors = process.env.BUILD_ERRORS;
+            const blame = process.env.BLAME;
+            const merged = process.env.MERGED;
+            const conflicts = process.env.CONFLICTS;
+
+            const body = `## Integration Build Failed
+
+            The combined agent code does not compile. A fix agent should resolve these errors.
+
+            ## Compiler Errors
+            \`\`\`
+            ${errors}
+            \`\`\`
+
+            ## File Blame (which branch introduced each failing file)
+            ${blame}
+
+            ## Branches Merged
+            ${merged}
+
+            ${conflicts ? `## Merge Conflicts (skipped)\n${conflicts}` : ''}
+
+            ## Instructions
+            - Check out the \`integration/latest\` branch or merge the listed agent branches
+            - Fix the compiler errors listed above
+            - Ensure all files have correct \`using\` statements and references
+            - The fix should go in \`project/hosts/complete-app/\`
+
+            ## Files to Modify
+            Check the compiler errors above for exact file paths and line numbers.
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Fix: integration build failure`,
+              body: body,
+              labels: ['agent']
+            });
+
+      - name: Push integration branch on success
+        if: steps.build.outputs.result == 'success'
+        run: |
+          cd ${{ env.GAME_DIR }}
+          git push origin integration/latest --force
