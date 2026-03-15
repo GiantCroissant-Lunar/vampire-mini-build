@@ -171,10 +171,9 @@ jobs:
             "$schema": "https://opencode.ai/config.json",
             "provider": {
               "bailian-coding-plan": {
-                "npm": "@ai-sdk/anthropic",
                 "name": "Model Studio Coding Plan",
                 "options": {
-                  "baseURL": "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1",
+                  "baseURL": "https://coding-intl.dashscope.aliyuncs.com/v1",
                   "apiKey": "{env:DASHSCOPE_API_KEY}"
                 },
                 "models": {
