@@ -75,13 +75,14 @@ Use the `create-issue` safe output to create each sub-issue. Every sub-issue you
 ### Guidelines for sub-issues:
 
 1. **One focused task per issue** — each issue should be completable independently
-2. **No duplicates** — before creating an issue, check if you've already created one covering the same scope. Each file or component should appear in exactly one issue. Never create two issues for the same class, scene, or system
-3. **Unique titles** — every sub-issue must have a distinct, descriptive title. Do not reuse titles
-4. **Be specific** — include exact file paths, class names, method signatures
-5. **Include acceptance criteria** — what should the result look like
-6. **Order matters** — create foundational issues first (e.g., base classes before derived classes)
-7. **Reference dependencies** — if issue B depends on issue A, mention it in B's body
-8. **File ownership** — each file should be created or modified by exactly one issue. If two tasks touch the same file, merge them into one issue
+2. **Must compile standalone** — each issue's code MUST compile on its own without depending on classes or files from other issues. If a task needs a type from another task, include a minimal stub or interface in that issue's instructions. For example, if issue B needs a `PlayerStats` class from issue A, tell issue B to create a stub `PlayerStats` if it doesn't already exist
+3. **No duplicates** — before creating an issue, check if you've already created one covering the same scope. Each file or component should appear in exactly one issue. Never create two issues for the same class, scene, or system
+4. **Unique titles** — every sub-issue must have a distinct, descriptive title. Do not reuse titles
+5. **Be specific** — include exact file paths, class names, method signatures
+6. **Include acceptance criteria** — what should the result look like
+7. **Order matters** — create foundational issues first (e.g., base classes before derived classes)
+8. **Reference dependencies** — if issue B depends on issue A, mention it in B's body
+9. **File ownership** — each file should be created or modified by exactly one issue. If two tasks touch the same file, merge them into one issue
 
 ### Sub-issue body format:
 

@@ -123,17 +123,75 @@ jobs:
           You are a game development agent working on a Godot 4.6 C# project.
 
           ## Project Info
-          - Engine: Godot 4.6 with C# scripting
+          - Engine: Godot 4.6 with C# scripting (Godot.NET.Sdk/4.6.1)
           - Physics: Jolt Physics
           - Project path: project/hosts/complete-app/
+          - 2D top-down vampire survival game
 
-          ## Guidelines
-          - Follow Godot 4.6 conventions for scenes (.tscn), resources (.tres), and C# scripts (.cs)
-          - Use Godot's C# API (GodotSharp)
-          - Place scripts in organized folders (e.g., Scripts/Player/, Scripts/Enemies/)
-          - Place scenes in organized folders (e.g., Scenes/Levels/, Scenes/UI/)
-          - Use PascalCase for C# class names and methods
-          - Use [Export] attributes for inspector-exposed properties
+          ## Critical Rules
+          1. Your code MUST compile on its own. Do NOT reference classes, scripts, or types that don't already exist in the project. If your task depends on a class that doesn't exist yet, create a minimal stub or interface for it in your files.
+          2. Do NOT commit the .godot/ directory, bin/, or obj/ folders.
+          3. Every .cs file must compile without errors. Run a mental check before writing.
+
+          ## Godot 4.6 C# API Reference (IMPORTANT — use these exact APIs)
+
+          ### Lifecycle Methods
+          - `public override void _Ready()` — called when node enters tree
+          - `public override void _Process(double delta)` — called every frame, use `delta` parameter NOT `Engine.DeltaTime`
+          - `public override void _PhysicsProcess(double delta)` — called every physics tick, use `delta` parameter
+          - `public override void _Input(InputEvent @event)` — input handling
+          - `public override void _UnhandledInput(InputEvent @event)` — unhandled input
+
+          ### Movement (CharacterBody2D)
+          - `Velocity = new Vector2(x, y);` then `MoveAndSlide();`
+          - `Input.GetVector("ui_left", "ui_right", "ui_up", "ui_down")` for directional input
+          - `IsOnFloor()`, `IsOnWall()`, `IsOnCeiling()`
+
+          ### Node Access
+          - `GetNode<T>("path")` — get typed child node
+          - `GetTree()` — get scene tree
+          - `GetTree().CreateTimer(seconds)` — create timer, await with `ToSignal()`
+
+          ### Camera2D
+          - Use `Enabled = true` NOT `.Current` (Camera2D.Current does not exist in Godot 4.6)
+          - `camera.MakeCurrent()` — make this camera active
+
+          ### Signals
+          - `[Signal] public delegate void MySignalEventHandler();` — signal declaration
+          - `EmitSignal(SignalName.MySignal);` — emit signal
+          - `node.MySignal += OnMySignal;` — connect via C# events
+
+          ### Resources
+          - `[GlobalClass] public partial class MyResource : Resource` — custom resource
+          - `[Export] public float Speed { get; set; } = 200f;` — exported property
+          - `GD.Load<T>("res://path")` — load resource
+
+          ### Common Patterns
+          - Timer: `await ToSignal(GetTree().CreateTimer(1.0), ScriptableObject.SignalName.Timeout);`
+          - Scene instantiation: `var scene = GD.Load<PackedScene>("res://path.tscn"); var instance = scene.Instantiate<Node2D>();`
+          - AnimationPlayer: `GetNode<AnimationPlayer>("AnimationPlayer").Play("animation_name");`
+          - Sprite flashing: modulate the `Modulate` property with `Colors.Red` / `Colors.White`
+          - Delta time: always use the `delta` parameter from `_Process(double delta)` or `_PhysicsProcess(double delta)`
+
+          ### What NOT to use (common mistakes)
+          - `Engine.DeltaTime` — DOES NOT EXIST. Use the `delta` parameter
+          - `Camera2D.Current` — DOES NOT EXIST as a settable property. Use `MakeCurrent()` or `Enabled`
+          - `GD.Print()` is fine for debugging but prefer `GD.PushWarning()` for warnings
+          - `GetComponent<T>()` — this is Unity, NOT Godot. Use `GetNode<T>()`
+          - `transform.position` — this is Unity. Use `Position` or `GlobalPosition`
+          - `Destroy()` — this is Unity. Use `QueueFree()`
+
+          ## File Organization
+          - Scripts: `Scripts/<Category>/ClassName.cs` (e.g., Scripts/Player/, Scripts/Enemies/)
+          - Scenes: `Scenes/<Category>/SceneName.tscn` (e.g., Scenes/Player/, Scenes/UI/)
+          - Resources: `Resources/<Category>/ResourceName.tres`
+
+          ## Code Style
+          - PascalCase for classes, methods, properties, signals
+          - camelCase for local variables and parameters
+          - `[Export]` for inspector-exposed properties
+          - `partial class` — all Godot classes MUST be partial
+          - Every class extending a Godot node must be `public partial class`
 
           ## Task
           PROMPT_HEADER
