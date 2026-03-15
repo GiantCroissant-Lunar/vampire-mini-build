@@ -261,15 +261,11 @@ jobs:
           task check
 
       # --- Build verification (Nuke) ---
-      - name: Restore dotnet tools
+      - name: Build check (Nuke)
         working-directory: ${{ env.GAME_DIR }}
         run: |
-          dotnet tool restore
-
-      - name: Build check
-        working-directory: ${{ env.GAME_DIR }}
-        run: |
-          dotnet nuke Check --verbosity normal
+          chmod +x build.sh
+          ./build.sh Check --verbosity normal
 
       # --- Version and changelog ---
       - name: Generate version
