@@ -2,7 +2,7 @@ name: Agent Sync - Clone, Work, Push
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [labeled]
   workflow_dispatch:
     inputs:
       branch_name:
@@ -171,6 +171,7 @@ jobs:
         if: steps.agent.outputs.engine == 'kimi'
         env:
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+          KIMI_MODEL_NAME: kimi-latest
         working-directory: ${{ env.GAME_DIR }}
         run: |
           kimi --quiet -p "$(cat ${{ steps.prompt.outputs.prompt_file }})"
