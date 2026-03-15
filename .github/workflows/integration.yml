@@ -182,6 +182,27 @@ jobs:
           echo "::warning::Merge conflicts in branches: ${{ steps.merge.outputs.conflicts }}"
           echo "These branches were skipped. Resolve conflicts manually or wait for the agent branches to be updated."
 
+      - name: Feature manifest check
+        if: steps.build.outputs.result == 'success'
+        run: |
+          chmod +x scripts/feature-check.sh
+          # Run feature check but don't fail the build — it's informational
+          scripts/feature-check.sh ${{ env.GAME_DIR }} || true
+
+      - name: Headless scene verification
+        if: steps.build.outputs.result == 'success'
+        run: |
+          cd ${{ env.GAME_DIR }}
+          VERIFY_SCRIPT="${{ env.GAME_DIR }}/${{ env.PROJECT_PATH || 'project/hosts/complete-app' }}/Scripts/Tests/HeadlessVerify.gd"
+          if [ -f "$VERIFY_SCRIPT" ]; then
+            echo "Running headless scene verification..."
+            timeout 60 godot --headless --path "${{ env.GAME_DIR }}/${{ env.PROJECT_PATH || 'project/hosts/complete-app' }}" --script "res://Scripts/Tests/HeadlessVerify.gd" || {
+              echo "::warning::Headless scene verification failed — see output above"
+            }
+          else
+            echo "No headless verification script found — skipping"
+          fi
+
       - name: Push integration branch on success
         if: steps.build.outputs.result == 'success'
         run: |
