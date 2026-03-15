@@ -1,3 +1,4 @@
+# Integration Build — merges all agent branches + runs verification pipeline
 name: Integration Build
 
 on:
