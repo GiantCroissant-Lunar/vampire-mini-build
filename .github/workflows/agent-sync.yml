@@ -109,9 +109,18 @@ jobs:
         run: |
           CHOICE="${{ github.event.inputs.agent || 'auto' }}"
           if [ "$CHOICE" = "auto" ]; then
-            # Round-robin by issue number: 0=kimi, 1=glm, 2=qwen
             ISSUE_NUM="${{ github.event.issue.number || github.run_number }}"
-            MOD=$((ISSUE_NUM % 3))
+
+            # Check if this is a retry — rotate to next agent
+            IS_RETRY="${{ contains(github.event.issue.labels.*.name, 'agent-retried') }}"
+            if [ "$IS_RETRY" = "true" ]; then
+              # On retry, shift by +1 from original assignment
+              MOD=$(( (ISSUE_NUM + 1) % 3 ))
+            else
+              # Normal round-robin: 0=kimi, 1=glm, 2=qwen
+              MOD=$((ISSUE_NUM % 3))
+            fi
+
             if [ "$MOD" -eq 0 ]; then
               echo "engine=kimi" >> $GITHUB_OUTPUT
             elif [ "$MOD" -eq 1 ]; then
@@ -338,8 +347,8 @@ jobs:
                   "apiKey": "{env:DASHSCOPE_API_KEY}"
                 },
                 "models": {
-                  "qwen3-coder-plus": {
-                    "name": "Qwen3 Coder Plus",
+                  "qwen3.5-plus": {
+                    "name": "Qwen3.5 Plus",
                     "modalities": {
                       "input": ["text"],
                       "output": ["text"]
@@ -352,7 +361,7 @@ jobs:
                 }
               }
             },
-            "model": "bailian-coding-plan/qwen3-coder-plus"
+            "model": "bailian-coding-plan/qwen3.5-plus"
           }
           EOF
 
@@ -613,4 +622,53 @@ jobs:
                 state: 'closed',
                 state_reason: 'completed'
               });
+            }
+
+            // Auto-retry: if agent failed, retry once with a different agent
+            if (result !== 'pushed' && context.issue?.number) {
+              const labels = await github.rest.issues.listLabelsOnIssue({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number
+              });
+              const hasRetried = labels.data.some(l => l.name === 'agent-retried');
+
+              if (!hasRetried) {
+                const agents = ['glm', 'kimi', 'qwen'];
+                const nextAgent = agents[(agents.indexOf(engine) + 1) % 3];
+
+                // Mark as retried to prevent infinite loops
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  labels: ['agent-retried']
+                });
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `🔄 Auto-retrying with **${nextAgent}** (${engine} did not produce a passing build).`
+                });
+
+                // Re-label to trigger agent-sync again (remove + re-add agent label)
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    name: 'agent'
+                  });
+                } catch (e) { /* label may already be removed */ }
+
+                // Small delay then re-add
+                await new Promise(r => setTimeout(r, 2000));
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  labels: ['agent']
+                });
+              }
             }

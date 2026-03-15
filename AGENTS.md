@@ -8,7 +8,7 @@ Three AI coding agents work on the **vampire-mini** Godot 4.6 C# game. Each runs
 |-------|-----|-------|----------|----------|
 | **GLM** | [OpenCode](https://opencode.ai) | glm-4.7 | Z.AI | `https://api.z.ai/api/coding/paas/v4` |
 | **Kimi** | [Kimi CLI](https://code.kimi.com) | kimi-for-coding | Moonshot | `https://api.kimi.com/coding/v1` |
-| **Qwen** | [OpenCode](https://opencode.ai) | qwen3-coder-plus | Alibaba Model Studio | `https://coding-intl.dashscope.aliyuncs.com/v1` |
+| **Qwen** | [OpenCode](https://opencode.ai) | qwen3.5-plus | Alibaba Model Studio | `https://coding-intl.dashscope.aliyuncs.com/v1` |
 
 ## Selection (Round-Robin)
 
