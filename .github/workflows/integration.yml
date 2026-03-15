@@ -46,7 +46,8 @@ jobs:
 
           MERGED=""
           FAILED_MERGE=""
-          for branch in $(git branch -r | grep 'origin/agent/' | sed 's/origin\///'); do
+          # Only merge primary agent branches, skip fix-of-fix branches to prevent cascades
+          for branch in $(git branch -r | grep 'origin/agent/issue-' | grep -v 'fix--' | sed 's/  origin\///'); do
             echo "--- Merging $branch ---"
             if git merge "origin/$branch" --no-edit -m "merge: $branch"; then
               MERGED="$MERGED $branch"
@@ -143,49 +144,11 @@ jobs:
               labels: ['agent']
             });
 
-      - name: Create conflict resolution issue
+      - name: Log merge conflicts
         if: steps.merge.outputs.conflicts != ''
-        uses: actions/github-script@v7
-        env:
-          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
-          MERGED: ${{ steps.merge.outputs.merged }}
-        with:
-          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || github.token }}
-          script: |
-            const conflicts = process.env.CONFLICTS.trim().split(/\s+/);
-            const merged = process.env.MERGED;
-
-            for (const branch of conflicts) {
-              if (!branch) continue;
-              const body = `## Merge Conflict Resolution
-
-            Branch \`${branch}\` has merge conflicts with the current integration branch and could not be merged.
-
-            ## Task
-            - Merge \`main\` and the following already-merged branches into \`${branch}\`
-            - Resolve all merge conflicts
-            - Ensure the code compiles after conflict resolution
-            - The resolved code should be in \`project/hosts/complete-app/\`
-
-            ## Already Merged Branches
-            ${merged}
-
-            ## Instructions
-            1. Start from \`${branch}\`
-            2. Merge \`main\` into it: \`git merge main\`
-            3. Resolve any conflicts in the C# files
-            4. Ensure \`using\` statements and class references are correct
-            5. Verify the project compiles with \`dotnet build\`
-            `;
-
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: `Fix: merge conflict in ${branch}`,
-                body: body,
-                labels: ['agent']
-              });
-            }
+        run: |
+          echo "::warning::Merge conflicts in branches: ${{ steps.merge.outputs.conflicts }}"
+          echo "These branches were skipped. Resolve conflicts manually or wait for the agent branches to be updated."
 
       - name: Push integration branch on success
         if: steps.build.outputs.result == 'success'
