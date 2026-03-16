@@ -1,4 +1,5 @@
 # Integration Build — merges all agent branches + runs verification pipeline
+# Re-registered triggers: 2026-03-16
 name: Integration Build
 
 on:
