@@ -441,3 +441,15 @@ jobs:
         run: |
           cd ${{ env.GAME_DIR }}
           git push origin integration/latest --force
+
+      - name: Fast-forward main to include all merged agent code
+        if: steps.build.outputs.result == 'success'
+        run: |
+          cd ${{ env.GAME_DIR }}
+          # Merge integration/latest into main so main always has the latest working code
+          git checkout main
+          git merge integration/latest --no-edit -m "integration: merge all passing agent code into main" || {
+            echo "::warning::Could not fast-forward main — merge conflict. Skipping main update."
+            exit 0
+          }
+          git push origin main
