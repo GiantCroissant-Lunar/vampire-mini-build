@@ -304,7 +304,67 @@ jobs:
           echo "has_transcript=true" >> $GITHUB_OUTPUT
         id: transcript
 
-      - name: Post transcript to pinned issue
+      - name: Post transcript to wiki and pinned issue
+        if: steps.build.outputs.result == 'success' && steps.transcript.outputs.has_transcript == 'true'
+        env:
+          MERGED_BRANCHES: ${{ steps.merge.outputs.merged }}
+        run: |
+          # Read transcript
+          TRANSCRIPT=""
+          if [ -f /tmp/play-session.log ]; then
+            TRANSCRIPT=$(cat /tmp/play-session.log)
+          else
+            TRANSCRIPT="(no transcript file generated)"
+          fi
+
+          NOW=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          DATE_SLUG=$(date -u '+%Y-%m-%d-%H%M%S')
+          MERGED="${{ steps.merge.outputs.merged }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          WIKI_PAGE="Play-Session-${DATE_SLUG}"
+          WIKI_URL="https://github.com/${{ github.repository }}/wiki/${WIKI_PAGE}"
+
+          # Clone wiki
+          git clone https://github.com/${{ github.repository }}.wiki.git /tmp/wiki-update 2>/dev/null || {
+            echo "::warning::Could not clone wiki — skipping wiki update"
+            exit 0
+          }
+          cd /tmp/wiki-update
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create dated session page
+          cat > "${WIKI_PAGE}.md" << WIKI_EOF
+          # Play Session — ${NOW}
+
+          **Run:** [${RUN_URL}](${RUN_URL})
+          **Branches merged:** ${MERGED:-none}
+
+          ## Transcript
+
+          \`\`\`
+          ${TRANSCRIPT}
+          \`\`\`
+          WIKI_EOF
+
+          # Update index page — prepend new entry to sessions table
+          if [ -f Play-Session-Log.md ]; then
+            sed -i "s|^| _awaiting first run_ | | |$|" Play-Session-Log.md 2>/dev/null || true
+            sed -i "/^## Sessions/,/^>/ {
+              /^| _awaiting/d
+            }" Play-Session-Log.md 2>/dev/null || true
+            # Add new entry after the table header
+            sed -i "/^|------|--------|------|$/a | ${NOW} | [View](${WIKI_URL}) | ${MERGED:+Merged: ${MERGED}}" Play-Session-Log.md
+          fi
+
+          git add -A
+          git commit -m "Add play session ${DATE_SLUG}" || {
+            echo "No wiki changes to commit"
+            exit 0
+          }
+          git push origin master || echo "::warning::Wiki push failed"
+
+      - name: Update pinned issue
         if: steps.build.outputs.result == 'success' && steps.transcript.outputs.has_transcript == 'true'
         uses: actions/github-script@v7
         env:
@@ -319,19 +379,24 @@ jobs:
             } catch (e) {
               transcript = '(no transcript file generated)';
             }
-
-            // Truncate if too long for GitHub comment
             if (transcript.length > 60000) {
               transcript = transcript.substring(0, 60000) + '\n\n... (truncated)';
             }
 
             const merged = process.env.MERGED_BRANCHES || 'unknown';
             const now = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+            const dateSlug = new Date().toISOString().replace(/[-:T]/g, m => m === 'T' ? '-' : m).substring(0, 17).replace(/:/g,'');
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const wikiUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/wiki`;
 
-            const body = `## Latest Gameplay Transcript
+            const body = `## Gameplay Session Log
 
-**Run:** [${now}](${runUrl})
+> **Wiki:** ${wikiUrl}
+> **All sessions:** ${wikiUrl}/Play-Session-Log
+
+### Latest Transcript — ${now}
+
+**Run:** [${runUrl}](${runUrl})
 **Branches merged:** ${merged.trim() || 'none'}
 
 <details open><summary>Play Session (60s headless)</summary>
@@ -343,9 +408,8 @@ ${transcript}
 </details>
 
 ---
-> Auto-updated by integration pipeline`;
+> Auto-updated by integration pipeline. Full history on [wiki](${wikiUrl}/Play-Session-Log).`;
 
-            // Update pinned issue #174
             await github.rest.issues.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
