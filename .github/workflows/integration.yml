@@ -406,26 +406,28 @@ jobs:
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const wikiUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/wiki`;
 
-            const body = `## Gameplay Session Log
-
-> **Wiki:** ${wikiUrl}
-> **All sessions:** ${wikiUrl}/Play-Session-Log
-
-### Latest Transcript — ${now}
-
-**Run:** [${runUrl}](${runUrl})
-**Branches merged:** ${merged.trim() || 'none'}
-
-<details open><summary>Play Session (60s headless)</summary>
-
-\`\`\`
-${transcript}
-\`\`\`
-
-</details>
-
----
-> Auto-updated by integration pipeline. Full history on [wiki](${wikiUrl}/Play-Session-Log).`;
+            const body = [
+              `## Gameplay Session Log`,
+              ``,
+              `> **Wiki:** ${wikiUrl}`,
+              `> **All sessions:** ${wikiUrl}/Play-Session-Log`,
+              ``,
+              `### Latest Transcript — ${now}`,
+              ``,
+              `**Run:** [${runUrl}](${runUrl})`,
+              `**Branches merged:** ${merged.trim() || 'none'}`,
+              ``,
+              `<details open><summary>Play Session (60s headless)</summary>`,
+              ``,
+              '```',
+              transcript,
+              '```',
+              ``,
+              `</details>`,
+              ``,
+              `---`,
+              `> Auto-updated by integration pipeline. Full history on [wiki](${wikiUrl}/Play-Session-Log).`
+            ].join('\n');
 
             await github.rest.issues.update({
               owner: context.repo.owner,
