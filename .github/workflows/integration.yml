@@ -357,8 +357,24 @@ jobs:
             sed -i "/^|------|--------|------|$/a | ${NOW} | [View](${WIKI_URL}) | ${MERGED:+Merged: ${MERGED}}" Play-Session-Log.md
           fi
 
+          # Prune sessions older than 10 days
+          CUTOFF=$(date -u -d '10 days ago' '+%Y-%m-%d' 2>/dev/null || date -u -v-10d '+%Y-%m-%d' 2>/dev/null || echo "")
+          if [ -n "$CUTOFF" ]; then
+            for old_page in Play-Session-20*.md; do
+              [ -f "$old_page" ] || continue
+              # Extract date from filename: Play-Session-YYYY-MM-DD-HHMMSS.md
+              PAGE_DATE=$(echo "$old_page" | grep -oP '(?<=Play-Session-)\d{4}-\d{2}-\d{2}')
+              if [ -n "$PAGE_DATE" ] && [ "$PAGE_DATE" \< "$CUTOFF" ]; then
+                echo "Pruning old session: $old_page (date: $PAGE_DATE, cutoff: $CUTOFF)"
+                git rm "$old_page"
+                # Remove from index
+                sed -i "/${PAGE_DATE}/d" Play-Session-Log.md 2>/dev/null || true
+              fi
+            done
+          fi
+
           git add -A
-          git commit -m "Add play session ${DATE_SLUG}" || {
+          git commit -m "Add play session ${DATE_SLUG}, prune >10 days" || {
             echo "No wiki changes to commit"
             exit 0
           }
