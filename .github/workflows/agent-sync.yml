@@ -200,10 +200,31 @@ jobs:
           - `transform.position` — this is Unity. Use `Position` or `GlobalPosition`
           - `Destroy()` — this is Unity. Use `QueueFree()`
 
-          ## File Organization
-          - Scripts: `Scripts/<Category>/ClassName.cs` (e.g., Scripts/Player/, Scripts/Enemies/)
-          - Scenes: `Scenes/<Category>/SceneName.tscn` (e.g., Scenes/Player/, Scenes/UI/)
-          - Resources: `Resources/<Category>/ResourceName.tres`
+          ## File Organization — CRITICAL
+          The Godot project root is `project/hosts/complete-app/`. ALL game files MUST be under this directory.
+          Files placed anywhere else (repo root, `Scripts/`, `vampire-mini/`, `addons/`, `project/Scripts/`, etc.) are INVISIBLE to Godot and will NOT compile.
+
+          CORRECT paths (always start with `project/hosts/complete-app/`):
+          - Scripts: `project/hosts/complete-app/Scripts/<Category>/ClassName.cs`
+          - Scenes: `project/hosts/complete-app/Scenes/<Category>/SceneName.tscn`
+          - Resources: `project/hosts/complete-app/Resources/<Category>/ResourceName.tres`
+          - Addons: `project/hosts/complete-app/addons/<addon_name>/`
+
+          WRONG paths (DO NOT use these):
+          - `Scripts/Player/MyScript.cs` ← WRONG (repo root)
+          - `Scenes/Weapons/MyScene.tscn` ← WRONG (repo root)
+          - `vampire-mini/weapons/MyWeapon.cs` ← WRONG
+          - `project/Scripts/MyScript.cs` ← WRONG (missing hosts/complete-app)
+          - `addons/MyAddon.cs` ← WRONG (repo root)
+
+          Inside .tscn and .cs files, use `res://` paths relative to the Godot root:
+          - `res://Scripts/Player/PlayerController.cs` (NOT the full repo path)
+          - `res://Scenes/Weapons/KnifeProjectile.tscn`
+
+          ## Namespace Rule
+          Do NOT use namespaces. All classes must be in the global namespace.
+          - WRONG: `namespace VampireMini.Scripts { ... }`
+          - CORRECT: just `public partial class MyClass : Node { ... }`
 
           ## Code Style
           - PascalCase for classes, methods, properties, signals
@@ -290,13 +311,22 @@ jobs:
           echo "prompt_file=$PROMPT_FILE" >> $GITHUB_OUTPUT
 
       # --- OpenCode agents (GLM + Qwen) ---
-      - name: Install OpenCode
+      - name: Cache OpenCode binary
         if: steps.agent.outputs.engine == 'glm' || steps.agent.outputs.engine == 'qwen'
+        uses: actions/cache@v4
+        id: cache-opencode
+        with:
+          path: ~/.local/bin/opencode
+          key: opencode-bin-${{ runner.os }}
+
+      - name: Install OpenCode
+        if: (steps.agent.outputs.engine == 'glm' || steps.agent.outputs.engine == 'qwen') && steps.cache-opencode.outputs.cache-hit != 'true'
         run: |
-          if ! command -v opencode &> /dev/null; then
-            curl -fsSL https://opencode.ai/install | bash
-          fi
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -fsSL https://opencode.ai/install | bash
+
+      - name: Add OpenCode to PATH
+        if: steps.agent.outputs.engine == 'glm' || steps.agent.outputs.engine == 'qwen'
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Configure OpenCode (GLM)
         if: steps.agent.outputs.engine == 'glm'
