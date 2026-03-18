@@ -1,0 +1,12 @@
+{
+  "name": "vampire-mini-bridge",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "WebSocket relay between Godot game and Claude Code",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
