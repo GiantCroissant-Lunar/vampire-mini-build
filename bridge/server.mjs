@@ -7,6 +7,7 @@ const HTTP_PORT = parseInt(process.env.HTTP_PORT || '9901');
 // --- State ---
 let gameClient = null;
 let latestState = null;
+let latestScreenshot = null;  // { width, height, format, data }
 const events = [];       // ring buffer
 const MAX_EVENTS = 500;
 let eventId = 0;
@@ -33,6 +34,9 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'state') {
         latestState = msg;
+      } else if (msg.type === 'screenshot') {
+        latestScreenshot = msg.payload;
+        console.log(`[bridge] Screenshot received: ${msg.payload.width}x${msg.payload.height}`);
       } else if (msg.type === 'event') {
         msg._eventId = ++eventId;
         events.push(msg);
@@ -136,6 +140,38 @@ const httpServer = http.createServer(async (req, res) => {
     return;
   }
 
+  // GET /screenshot — returns latest screenshot as base64 JSON
+  if (req.method === 'GET' && url.pathname === '/screenshot') {
+    if (!latestScreenshot) {
+      // Request one from the game
+      if (gameClient && gameClient.readyState === 1) {
+        gameClient.send(JSON.stringify({ type: 'cmd', id: 'ss_req', cmd: 'bridge.screenshot', args: {} }));
+        // Wait up to 3s for screenshot
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      if (!latestScreenshot) {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'No screenshot available' }));
+        return;
+      }
+    }
+    res.end(JSON.stringify(latestScreenshot));
+    return;
+  }
+
+  // GET /screenshot.png — returns raw PNG image
+  if (req.method === 'GET' && url.pathname === '/screenshot.png') {
+    if (!latestScreenshot) {
+      res.statusCode = 503;
+      res.setHeader('Content-Type', 'text/plain');
+      res.end('No screenshot available');
+      return;
+    }
+    res.setHeader('Content-Type', 'image/png');
+    res.end(Buffer.from(latestScreenshot.data, 'base64'));
+    return;
+  }
+
   // GET /clear-events
   if (req.method === 'GET' && url.pathname === '/clear-events') {
     events.length = 0;
@@ -153,6 +189,8 @@ const httpServer = http.createServer(async (req, res) => {
       'GET /events?last=N',
       'GET /events?since=ID',
       'POST /cmd {cmd, args}',
+      'GET /screenshot',
+      'GET /screenshot.png',
       'GET /clear-events'
     ]
   }));
