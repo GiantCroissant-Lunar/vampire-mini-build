@@ -8,3 +8,11 @@
 # OS
 Thumbs.db
 .DS_Store
+
+# Node
+node_modules/
+
+# Bridge artifacts
+bridge/test-results.json
+bridge/screenshot.png
+bridge/artifacts/

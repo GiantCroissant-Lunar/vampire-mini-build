@@ -2,11 +2,25 @@
   "name": "vampire-mini-bridge",
   "version": "1.0.0",
   "type": "module",
-  "description": "WebSocket relay between Godot game and Claude Code",
+  "description": "WebSocket relay + scenario testing for Godot game via agent bridge",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "vitest run scenarios/00-smoke.test.ts",
+    "test:endurance": "vitest run scenarios/01-survival-endurance.test.ts",
+    "test:weapons": "vitest run scenarios/02-weapon-stress.test.ts",
+    "test:levelup": "vitest run scenarios/03-levelup-gauntlet.test.ts",
+    "test:edge": "vitest run scenarios/04-edge-cases.test.ts",
+    "verify": "node verify.mjs",
+    "generate": "node src/generate-types.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "quicktype-core": "^23.2.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }
