@@ -161,7 +161,7 @@ export class BridgeClient {
   /** Wait until player is alive and has HP */
   async waitForGameplay(timeoutMs = 15000): Promise<StateMessage> {
     return this.waitForState(
-      s => (s.player?.hp ?? 0) > 0 && s.player?.alive === true,
+      s => (s.player?.hp ?? 0) > 0 && !s.player?.error,
       timeoutMs,
       500,
       'gameplay started'
