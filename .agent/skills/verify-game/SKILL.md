@@ -150,6 +150,7 @@ taskkill /F /IM vampire-survivors.exe 2>NUL
 | Weapon Stress | `test:weapons` | ~30s | Dedup, upgrades, DPS under load |
 | Level-Up Gauntlet | `test:levelup` | ~45s | XP injection, menu cycling, double-click guard |
 | Edge Cases | `test:edge` | ~1min | Instant death, pause spam, invalid commands, scene cycling |
+| Playtest Agent | `test:playtest` | ~2min | Full gameplay loop: movement, combat, level-ups, weapon acquisition |
 
 ## Verification Checklist
 
@@ -164,6 +165,9 @@ taskkill /F /IM vampire-survivors.exe 2>NUL
 | Level-up works | XP injection triggers level_up event |
 | Screenshots captured | All .png files exist and are >0 bytes |
 | Game quits cleanly | `scene.quit` command succeeds |
+| Player levels up | XP causes level increase and upgrade menu appears |
+| Weapons acquired | Level-up grants new weapons (KnifeLauncher + others) |
+| Movement works | `input.inject_move` moves player in all directions |
 | **Processes cleaned up** | No vampire-survivors.exe or orphan bridge left running |
 
 ## Adding New Scenarios

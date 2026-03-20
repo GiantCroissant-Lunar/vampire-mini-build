@@ -12,6 +12,7 @@
     "test:weapons": "vitest run scenarios/02-weapon-stress.test.ts",
     "test:levelup": "vitest run scenarios/03-levelup-gauntlet.test.ts",
     "test:edge": "vitest run scenarios/04-edge-cases.test.ts",
+    "test:playtest": "vitest run scenarios/05-playtest-agent.test.ts",
     "verify": "node verify.mjs",
     "generate": "node src/generate-types.mjs"
   },
