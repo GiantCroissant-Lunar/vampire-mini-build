@@ -31,7 +31,7 @@ describe('Survival Endurance', () => {
     try {
       const p = await bridge.player()
       if (!p.alive || p.hp <= 0) {
-        await bridge.cmd('scene.start_game')
+        await bridge.navigateMenuFlow()
         await bridge.waitForGameplay()
       }
     } catch {

@@ -17,8 +17,7 @@ describe('Weapon Stress Test', () => {
     expect(ok).toBe(true)
 
     // Start fresh game
-    await bridge.cmd('scene.start_game')
-    await bridge.waitForGameplay()
+    await bridge.startGame()
     await bridge.clearEvents()
   })
 

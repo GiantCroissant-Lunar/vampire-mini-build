@@ -30,9 +30,9 @@ describe('Smoke Test', () => {
     await bridge.screenshot('smoke_initial.png')
   })
 
-  it('can navigate to gameplay', async () => {
-    // Force start via scene command — works from any screen
-    await bridge.cmd('scene.start_game')
+  it('can navigate to gameplay via menu flow', async () => {
+    // Walk full menu: Title → Character → Difficulty → Arena → Gameplay
+    await bridge.navigateMenuFlow()
     await sleep(3000)
 
     // Check if player exists in state

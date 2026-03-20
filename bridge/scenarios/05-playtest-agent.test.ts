@@ -74,8 +74,7 @@ describe('Playtest Agent', () => {
     expect(ok).toBe(true)
 
     // Start fresh game
-    await bridge.cmd('scene.start_game')
-    await bridge.waitForGameplay(15000)
+    await bridge.startGame()
     bridge.log('Game started')
 
     // Make player nearly unkillable so we can test the full gameplay loop

@@ -232,7 +232,7 @@ export class BridgeClient {
 
   // ==================== Game Flow Helpers ====================
 
-  /** Navigate to title screen and click Start (or detect already in gameplay) */
+  /** Navigate through full menu flow: Title → Character → Difficulty → Arena → Gameplay */
   async startGame(): Promise<void> {
     // Check if already in gameplay
     try {
@@ -243,9 +243,32 @@ export class BridgeClient {
       }
     } catch { /* no player state yet — need to start */ }
 
-    await this.cmd('scene.start_game')
+    await this.navigateMenuFlow()
     await this.waitForGameplay(15000)
     this.log('Game started — player alive')
+  }
+
+  /** Walk the menu state machine: Title → CharacterSelect → DifficultySelect → ArenaSelect → Gameplay */
+  async navigateMenuFlow(): Promise<void> {
+    // Step 1: Title → click Classic Mode
+    this.log('Menu flow: clicking Classic Mode...')
+    await this.cmd('ui.click_by_text', { text: 'Classic' })
+    await sleep(2000)
+
+    // Step 2: CharacterSelect → click Start Run
+    this.log('Menu flow: clicking Start Run (character)...')
+    await this.cmd('ui.click_by_text', { text: 'Start Run' })
+    await sleep(2000)
+
+    // Step 3: DifficultySelect → click Normal
+    this.log('Menu flow: clicking Normal difficulty...')
+    await this.cmd('ui.click_by_text', { text: 'Normal' })
+    await sleep(2000)
+
+    // Step 4: ArenaSelect → click Start Run
+    this.log('Menu flow: clicking Start Run (arena)...')
+    await this.cmd('ui.click_by_text', { text: 'Start Run' })
+    await sleep(3000)
   }
 
   /** Quit the game cleanly */

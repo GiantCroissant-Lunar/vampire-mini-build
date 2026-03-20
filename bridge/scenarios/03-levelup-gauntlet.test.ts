@@ -22,8 +22,7 @@ describe('Level-Up Gauntlet', () => {
     expect(ok).toBe(true)
 
     // Start fresh
-    await bridge.cmd('scene.start_game')
-    await bridge.waitForGameplay()
+    await bridge.startGame()
 
     // Make invincible so we don't die mid-gauntlet
     await bridge.cmd('player.set_invincible', { enabled: true })

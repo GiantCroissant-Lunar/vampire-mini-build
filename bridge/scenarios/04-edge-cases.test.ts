@@ -19,8 +19,7 @@ describe('Edge Cases', () => {
 
   describe('Instant Death', () => {
     beforeEach(async () => {
-      await bridge.cmd('scene.start_game')
-      await bridge.waitForGameplay()
+      await bridge.startGame()
     })
 
     it('player can be killed via damage command', async () => {
@@ -57,8 +56,7 @@ describe('Edge Cases', () => {
 
   describe('Pause/Unpause Spam', () => {
     beforeEach(async () => {
-      await bridge.cmd('scene.start_game')
-      await bridge.waitForGameplay()
+      await bridge.startGame()
     })
 
     it('survives 20 rapid pause/unpause cycles', async () => {
@@ -92,8 +90,7 @@ describe('Edge Cases', () => {
 
   describe('Level-Up Interruption', () => {
     beforeEach(async () => {
-      await bridge.cmd('scene.start_game')
-      await bridge.waitForGameplay()
+      await bridge.startGame()
       await bridge.cmd('player.set_invincible', { enabled: true })
     })
 

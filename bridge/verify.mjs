@@ -266,23 +266,40 @@ async function main() {
 
   // ---- Step 5: Verification session ----
 
-  // Phase 1: Title Screen
-  log("\n--- Phase 1: Title Screen ---");
+  // Phase 1: Navigate menu flow (Title → Character → Difficulty → Arena → Gameplay)
+  log("\n--- Phase 1: Menu Flow ---");
   await sleep(2000);
 
   await saveScreenshot("screenshot_title.png");
 
   const buttons = await cmd("ui.get_buttons");
-  const hasStartButton = JSON.stringify(buttons).includes("Start");
-  check("Title screen has Start button", hasStartButton, JSON.stringify(buttons.value?.map(b => b.text)));
+  const buttonTexts = buttons.value?.map(b => b.text) || [];
+  log(`Title buttons: ${JSON.stringify(buttonTexts)}`);
+  check("Title screen loaded", buttonTexts.length > 0, JSON.stringify(buttonTexts));
+
+  // Step 1: Click "Classic Mode" on title screen
+  log("Clicking Classic Mode...");
+  await cmd("ui.click_by_text", { text: "Classic" });
+  await sleep(2000);
+
+  // Step 2: Character Select → click "Start Run"
+  log("Clicking Start Run (character select)...");
+  await cmd("ui.click_by_text", { text: "Start Run" });
+  await sleep(2000);
+
+  // Step 3: Difficulty Select → click "Normal"
+  log("Clicking Normal difficulty...");
+  await cmd("ui.click_by_text", { text: "Normal" });
+  await sleep(2000);
+
+  // Step 4: Arena Select → click "Start Run"
+  log("Clicking Start Run (arena select)...");
+  await cmd("ui.click_by_text", { text: "Start Run" });
+  await sleep(3000);
 
   const scene = await cmd("ui.get_scene");
-  log(`Current scene: ${JSON.stringify(scene.value)}`);
-
-  // Start game via MessagePipe
-  const startResult = await cmd("scene.start_game");
-  check("Game starts via command", startResult.ok, JSON.stringify(startResult.value));
-  await sleep(3000);
+  const inGameplay = JSON.stringify(scene.value).includes("Main");
+  check("Game reached gameplay", inGameplay, JSON.stringify(scene.value));
 
   // Phase 2: Early Gameplay
   log("\n--- Phase 2: Early Gameplay ---");
