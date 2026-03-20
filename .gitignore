@@ -16,3 +16,4 @@ node_modules/
 bridge/test-results.json
 bridge/screenshot.png
 bridge/artifacts/
+bridge/debug_*.png
