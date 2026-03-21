@@ -59,29 +59,31 @@ public static class AgentLoop
                 await Task.Delay((int)(2000 - turnTime));
         }
 
-        // Phase 2: Investigate & Fix (budget-conscious — max 20 tool calls)
-        Console.WriteLine($"[agent] Phase 2: Investigating bugs and producing artifacts...");
-        var investigatePrompt = """
-            PHASE 2: Investigation. BUDGET: You have ~20 tool calls remaining.
-            Be surgical — don't read every file. Target only files you identified during play.
+        // Phase 2: Produce artifacts using observations from play phase
+        // No file reading — the agent should use its observations to report bugs directly
+        Console.WriteLine($"[agent] Phase 2: Producing bug reports and patches...");
 
-            IMPORTANT: Produce artifacts FIRST, investigate SECOND. Do not spend all
-            your budget reading files before creating outputs.
+        // Get final state for context
+        string finalStateJson = "{}";
+        try { finalStateJson = System.Text.Json.JsonSerializer.Serialize(await bridge.GetStateAsync()); }
+        catch { /* ok */ }
 
-            For your TOP 2 bugs (most impactful):
-            1. Read ONLY the specific file+lines you suspect (1-2 reads max per bug)
-            2. IMMEDIATELY call `report_bug` with what you know
-            3. Call `create_code_diff` if you can write a fix
-            4. Call `log_observation` level="error" for each
+        var investigatePrompt = $"""
+            PHASE 2: You MUST now produce artifacts. DO NOT read any files.
+            Use your observations from the play phase to immediately create outputs.
 
-            Then write your summary:
-            - Stats: level, kills, weapons, passives
-            - Bugs filed: list filenames
-            - Patches created: list filenames
-            - Remaining issues for next session
+            Final game state: {finalStateJson}
+
+            For each bug you observed, call these tools IN THIS ORDER:
+            1. `report_bug` — file the bug with severity, repro steps, and your best guess at root cause/code location
+            2. `create_code_diff` — if you can guess the fix based on what you observed
+            3. `log_observation` — level="error" to log each confirmed bug
+
+            DO NOT call any file read/search tools. You already know enough from playing.
+            Produce 2-3 bug reports, then write your final summary.
             """;
 
-        var summary = await SendTurn(session, investigatePrompt, timeoutSeconds: 120);
+        var summary = await SendTurn(session, investigatePrompt, timeoutSeconds: 60);
         log.Summary = summary;
 
         // Capture final state
