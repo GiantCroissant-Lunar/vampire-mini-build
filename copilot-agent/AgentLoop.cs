@@ -66,28 +66,32 @@ public static class AgentLoop
         }
 
         // Phase 2: Investigate & Fix
-        Console.WriteLine($"[agent] Phase 2: Investigating bugs and fixing code...");
+        Console.WriteLine($"[agent] Phase 2: Investigating bugs and producing artifacts...");
         var investigatePrompt = """
-            The play phase is over. Now switch to investigation mode.
+            PHASE 2: Investigation mode. You MUST produce structured artifacts.
 
-            1. Take a final screenshot and observe the final game state
-            2. List all bugs and issues you noticed during gameplay
-            3. For each bug, read the relevant source code files to understand the root cause
-            4. If the fix is straightforward (< 20 lines changed), apply it directly
-            5. If the fix is complex, document the root cause with file paths and line numbers
+            For EACH bug you observed during gameplay, do ALL of these steps:
 
-            Focus on gameplay-breaking bugs first, then visual issues, then balance.
-            Use the file tools (read, edit, grep) to explore the codebase.
-            The game source is in the current working directory.
+            Step 1: Read the source code to find the root cause
+            Step 2: Call `report_bug` with severity, repro steps, code location, root cause
+            Step 3: Call `create_code_diff` with a unified diff patch (--- a/ +++ b/ format)
+            Step 4: Call `create_resource_manifest` if assets need changes
+            Step 5: Call `log_observation` with level="error" for each confirmed bug
 
-            After investigating, write your final playtest report covering:
+            If you noticed missing sprites or textures, create a resource manifest.
+            Take a final screenshot and get final game state.
+
+            Priority order: critical bugs first, then major, then minor.
+
+            After ALL bugs are filed with artifacts, write a summary listing:
             - Stats: level, kills, weapons, passives
-            - Bugs found: with file paths and root cause
-            - Fixes applied: what you changed and why
-            - Remaining issues: what needs manual attention
+            - Bugs filed: list each bugs/*.json filename
+            - Patches created: list each diffs/*.patch filename
+            - Resource manifests: list each manifests/*.json filename
+            - Remaining issues that need manual attention
             """;
 
-        var summary = await SendTurn(session, investigatePrompt, timeoutSeconds: 180);
+        var summary = await SendTurn(session, investigatePrompt, timeoutSeconds: 300);
         log.Summary = summary;
 
         // Capture final state
