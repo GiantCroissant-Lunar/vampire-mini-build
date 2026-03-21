@@ -80,7 +80,41 @@ jobs:
             echo "name=agent/issue-${ISSUE_NUM}-${SLUG}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check for duplicate work
+        id: duplicate-check
+        run: |
+          cd ${{ env.GAME_DIR }}
+          ISSUE_NUM="${{ github.event.issue.number || '0' }}"
+          if [ "$ISSUE_NUM" = "0" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if ANY branch for this issue already exists with commits ahead of main
+          EXISTING=$(git ls-remote --heads origin | grep "agent/issue-${ISSUE_NUM}-" | head -1 | awk '{print $2}' | sed 's|refs/heads/||')
+          if [ -n "$EXISTING" ]; then
+            git fetch origin "$EXISTING" --depth=5 2>/dev/null
+            AHEAD=$(git rev-list --count "origin/main..origin/$EXISTING" 2>/dev/null || echo "0")
+            if [ "$AHEAD" -gt 0 ]; then
+              IS_RETRY="${{ contains(github.event.issue.labels.*.name, 'agent-retried') }}"
+              if [ "$IS_RETRY" = "true" ]; then
+                echo "Branch $EXISTING exists ($AHEAD ahead) but this is a retry — proceeding"
+                echo "skip=false" >> $GITHUB_OUTPUT
+              else
+                echo "::warning::Branch $EXISTING already exists with $AHEAD commit(s) — skipping to prevent duplicate work"
+                echo "skip=true" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "Branch exists but no commits ahead — proceeding"
+              echo "skip=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No existing branch for issue $ISSUE_NUM — proceeding"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create working branch
+        if: steps.duplicate-check.outputs.skip != 'true'
         run: |
           cd ${{ env.GAME_DIR }}
           BRANCH="${{ steps.branch.outputs.name }}"
@@ -105,6 +139,7 @@ jobs:
           echo "On branch: $(git branch --show-current)"
 
       - name: Select agent
+        if: steps.duplicate-check.outputs.skip != 'true'
         id: agent
         run: |
           CHOICE="${{ github.event.inputs.agent || 'auto' }}"
@@ -134,6 +169,7 @@ jobs:
           echo "Selected agent: $(cat $GITHUB_OUTPUT | grep engine)"
 
       - name: Prepare agent prompt
+        if: steps.duplicate-check.outputs.skip != 'true'
         id: prompt
         run: |
           PROMPT_FILE="${GITHUB_WORKSPACE}/agent-prompt.txt"
@@ -348,7 +384,7 @@ jobs:
 
       - name: Run OpenCode agent (GLM-4.7)
         id: run-glm
-        if: steps.agent.outputs.engine == 'glm'
+        if: steps.duplicate-check.outputs.skip != 'true' && steps.agent.outputs.engine == 'glm'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         working-directory: ${{ env.GAME_DIR }}
@@ -397,7 +433,7 @@ jobs:
 
       - name: Run OpenCode agent (Qwen)
         id: run-qwen
-        if: steps.agent.outputs.engine == 'qwen'
+        if: steps.duplicate-check.outputs.skip != 'true' && steps.agent.outputs.engine == 'qwen'
         env:
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
         working-directory: ${{ env.GAME_DIR }}
@@ -440,7 +476,7 @@ jobs:
 
       - name: Run Kimi agent
         id: run-kimi
-        if: steps.agent.outputs.engine == 'kimi'
+        if: steps.duplicate-check.outputs.skip != 'true' && steps.agent.outputs.engine == 'kimi'
         working-directory: ${{ env.GAME_DIR }}
         run: |
           set +e
@@ -454,6 +490,7 @@ jobs:
 
       # --- Check if agent made changes ---
       - name: Check for agent changes
+        if: steps.duplicate-check.outputs.skip != 'true'
         id: changes
         run: |
           cd ${{ env.GAME_DIR }}
