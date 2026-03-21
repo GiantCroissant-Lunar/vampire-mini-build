@@ -15,6 +15,8 @@ concurrency:
 env:
   PRIVATE_REPO: "git@github.com:GiantCroissant-Lunar/vampire-mini.git"
   GAME_DIR: "game"
+  PROJECT_PATH: "project/hosts/complete-app"
+  SESSION_LOG_ISSUE: 174
 
 jobs:
   integration:
@@ -112,7 +114,7 @@ jobs:
         run: |
           if find . -path '*/Tests/*.cs' -name '*Test*.cs' | head -1 | grep -q .; then
             TEST_LOG=$(mktemp)
-            if dotnet test ${{ env.GAME_DIR }}/${{ env.PROJECT_PATH || 'project/hosts/complete-app' }} --no-build --verbosity normal --logger "console;verbosity=detailed" 2>&1 | tee "$TEST_LOG"; then
+            if dotnet test ${{ env.GAME_DIR }}/${{ env.PROJECT_PATH }} --no-build --verbosity normal --logger "console;verbosity=detailed" 2>&1 | tee "$TEST_LOG"; then
               echo "result=success" >> $GITHUB_OUTPUT
               echo "All tests passed"
             else
@@ -195,10 +197,10 @@ jobs:
         if: steps.build.outputs.result == 'success'
         run: |
           cd ${{ env.GAME_DIR }}
-          VERIFY_SCRIPT="${{ env.GAME_DIR }}/${{ env.PROJECT_PATH || 'project/hosts/complete-app' }}/Scripts/Tests/HeadlessVerify.gd"
+          VERIFY_SCRIPT="${{ env.GAME_DIR }}/${{ env.PROJECT_PATH }}/Scripts/Tests/HeadlessVerify.gd"
           if [ -f "$VERIFY_SCRIPT" ]; then
             echo "Running headless scene verification..."
-            timeout 60 godot --headless --path "${{ env.GAME_DIR }}/${{ env.PROJECT_PATH || 'project/hosts/complete-app' }}" --script "res://Scripts/Tests/HeadlessVerify.gd" || {
+            timeout 60 godot --headless --path "${{ env.GAME_DIR }}/${{ env.PROJECT_PATH }}" --script "res://Scripts/Tests/HeadlessVerify.gd" || {
               echo "::warning::Headless scene verification failed — see output above"
             }
           else
@@ -432,7 +434,7 @@ jobs:
             await github.rest.issues.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: 174,
+              issue_number: ${{ env.SESSION_LOG_ISSUE }},
               body: body
             });
 

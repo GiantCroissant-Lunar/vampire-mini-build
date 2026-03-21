@@ -5,9 +5,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { BridgeClient, sleep } from '../src/bridge-client.js'
-
-const ARTIFACTS = process.env.ARTIFACTS_DIR
-  ?? 'C:\\lunar-horse\\contract-projects\\vampire-mini\\project\\hosts\\complete-app\\build\\_artifacts\\latest\\windows_debug_x86_64'
+import { ARTIFACTS } from '../src/test-config.js'
 
 describe('Edge Cases', () => {
   const bridge = new BridgeClient({ artifactsDir: ARTIFACTS })

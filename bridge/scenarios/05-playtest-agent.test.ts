@@ -10,9 +10,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { BridgeClient, sleep } from '../src/bridge-client.js'
-
-const ARTIFACTS = process.env.ARTIFACTS_DIR
-  ?? 'C:\\lunar-horse\\contract-projects\\vampire-mini\\project\\hosts\\complete-app\\build\\_artifacts\\latest\\windows_debug_x86_64'
+import { ARTIFACTS } from '../src/test-config.js'
 
 const PLAYTEST_DURATION = parseInt(process.env.PLAYTEST_DURATION ?? '60', 10)
 
@@ -39,14 +37,14 @@ describe('Playtest Agent', () => {
   /** Move the player in the next pattern direction */
   async function movePlayer(durationMs = 400) {
     const p = MOVE_PATTERNS[moveIdx % MOVE_PATTERNS.length]
-    await bridge.cmd('input.inject_move', { x: p.x, y: p.y })
+    await bridge.cmd('input.move', { x: p.x, y: p.y })
     await sleep(durationMs)
     moveIdx++
   }
 
   /** Stop player movement */
   async function stopMoving() {
-    await bridge.cmd('input.inject_move', { x: 0, y: 0 })
+    await bridge.cmd('input.move', { x: 0, y: 0 })
   }
 
   /** Check for and handle level-up menu */
@@ -78,26 +76,23 @@ describe('Playtest Agent', () => {
     bridge.log('Game started')
 
     // Make player nearly unkillable so we can test the full gameplay loop
-    await bridge.cmd('player.set_max_hp', { maxHp: 99999 })
-    await bridge.cmd('player.set_hp', { hp: 99999 })
-    bridge.log('Player HP set to 99999 for testing')
+    await bridge.cmd('player.set_invincible', { enabled: true })
+    bridge.log('Player set to invincible for testing')
 
     // Speed up time 3x for faster testing
     await bridge.cmd('bridge.set_timescale', { scale: 3 })
     bridge.log('Timescale set to 3x')
 
-    // Set spawn ratio to all Node2D so bridge can track alive count
-    await bridge.cmd('spawner.set_ecs_ratio', { ratio: 0.0 })
-
     // Spawn initial batch of enemies to kickstart combat
     await bridge.cmd('enemies.spawn', { count: 10 })
-    bridge.log('Spawned 10 initial enemies (all Node2D for tracking)')
+    bridge.log('Spawned 10 initial enemies')
 
     await bridge.screenshot('playtest_start.png')
   }, 30000)
 
   afterAll(async () => {
     try {
+      await bridge.cmd('player.set_invincible', { enabled: false })
       await bridge.cmd('bridge.set_timescale', { scale: 1 })
     } catch { /* game may be closed */ }
   })
@@ -111,7 +106,7 @@ describe('Playtest Agent', () => {
 
   it('can move player in all directions', async () => {
     for (const p of MOVE_PATTERNS.slice(0, 4)) {
-      await bridge.cmd('input.inject_move', { x: p.x, y: p.y })
+      await bridge.cmd('input.move', { x: p.x, y: p.y })
       await sleep(300)
     }
     await stopMoving()
@@ -155,7 +150,7 @@ describe('Playtest Agent', () => {
 
       // 2. Occasionally dash (15% chance)
       if (Math.random() < 0.15) {
-        await bridge.cmd('input.inject_dash')
+        await bridge.cmd('input.dash')
       }
 
       // 3. Check for and handle level-up menu

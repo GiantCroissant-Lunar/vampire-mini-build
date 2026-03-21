@@ -5,9 +5,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import { BridgeClient, sleep } from '../src/bridge-client.js'
-
-const ARTIFACTS = process.env.ARTIFACTS_DIR
-  ?? 'C:\\lunar-horse\\contract-projects\\vampire-mini\\project\\hosts\\complete-app\\build\\_artifacts\\latest\\windows_debug_x86_64'
+import { ARTIFACTS } from '../src/test-config.js'
 
 const DURATION_SECONDS = parseInt(process.env.ENDURANCE_DURATION ?? '120', 10)
 const SNAPSHOT_INTERVAL = 15 // seconds between snapshots
