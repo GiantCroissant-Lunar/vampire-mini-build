@@ -10,10 +10,36 @@ var model = GetArg("--model", "gpt-5.4");
 var outputDir = GetArg("--output", "./output");
 var gameSourceDir = GetArg("--game-source",
     @"C:\lunar-horse\contract-projects\vampire-mini\project\hosts\complete-app");
+var promptFile = GetArg("--prompt", "");
+var metaMode = args.Contains("--meta");
+var iterations = int.Parse(GetArg("--iterations", "5"));
 
+// ══════════════════════════════════════════════════════════════════
+//  META MODE — autoresearch loop (Copilot = meta-agent)
+// ══════════════════════════════════════════════════════════════════
+if (metaMode)
+{
+    Console.WriteLine($"[meta] Autoresearch mode — {iterations} iterations, {duration}s per playtest");
+
+    await using var client = new CopilotClient();
+    await client.StartAsync();
+
+    await using var session = await client.CreateSessionAsync(new SessionConfig
+    {
+        Model = model,
+        OnPermissionRequest = PermissionHandler.ApproveAll,
+    });
+
+    await MetaLoop.RunAsync(session, iterations, duration, outputDir);
+    return 0;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  PLAYTEST MODE — single run (existing behavior)
+// ══════════════════════════════════════════════════════════════════
 Directory.CreateDirectory(outputDir);
 
-// ── Verify Bridge Connection ─────────────────────────────────────
+// Verify bridge connection
 using var bridge = new BridgeHttpClient(bridgeUrl);
 Console.WriteLine($"[init] Connecting to bridge at {bridgeUrl}...");
 
@@ -28,22 +54,36 @@ for (int i = 0; i < 15; i++)
     await Task.Delay(1000);
 }
 
-// ── Load System Prompt ───────────────────────────────────────────
-var promptPath = Path.Combine(AppContext.BaseDirectory, "system-prompt.md");
-if (!File.Exists(promptPath))
-    promptPath = Path.Combine(Directory.GetCurrentDirectory(), "system-prompt.md");
-var systemPrompt = File.Exists(promptPath)
-    ? await File.ReadAllTextAsync(promptPath)
-    : "You are a game playtest agent. Use the tools to play the game.";
+// Load prompt — either from --prompt flag or system-prompt.md
+string systemPrompt;
+if (!string.IsNullOrEmpty(promptFile) && File.Exists(promptFile))
+{
+    // Load the base system prompt + append the playtest-specific prompt
+    var basePath = Path.Combine(AppContext.BaseDirectory, "system-prompt.md");
+    if (!File.Exists(basePath))
+        basePath = Path.Combine(Directory.GetCurrentDirectory(), "system-prompt.md");
+    var basePrompt = File.Exists(basePath) ? await File.ReadAllTextAsync(basePath) : "";
+    var playtestPrompt = await File.ReadAllTextAsync(promptFile);
+    systemPrompt = basePrompt + "\n\n" + playtestPrompt;
+}
+else
+{
+    var promptPath = Path.Combine(AppContext.BaseDirectory, "system-prompt.md");
+    if (!File.Exists(promptPath))
+        promptPath = Path.Combine(Directory.GetCurrentDirectory(), "system-prompt.md");
+    systemPrompt = File.Exists(promptPath)
+        ? await File.ReadAllTextAsync(promptPath)
+        : "You are a game playtest agent. Use the tools to play the game.";
+}
 
-// ── Create Copilot Client & Session ──────────────────────────────
+// Create Copilot client & session
 Console.WriteLine($"[init] Starting Copilot client (model: {model})...");
-await using var client = new CopilotClient();
-await client.StartAsync();
+await using var client2 = new CopilotClient();
+await client2.StartAsync();
 
 var tools = PlaytestTools.Create(bridge, outputDir);
 
-await using var session = await client.CreateSessionAsync(new SessionConfig
+await using var session2 = await client2.CreateSessionAsync(new SessionConfig
 {
     Model = model,
     Tools = tools,
@@ -59,10 +99,8 @@ await using var session = await client.CreateSessionAsync(new SessionConfig
 Console.WriteLine($"[init] Session created. Running {duration}s playtest...");
 Console.WriteLine(new string('─', 60));
 
-// ── Run Agent Loop ───────────────────────────────────────────────
-var log = await AgentLoop.RunAsync(session, duration, bridge, outputDir);
+var log = await AgentLoop.RunAsync(session2, duration, bridge, outputDir);
 
-// ── Write Report ─────────────────────────────────────────────────
 Console.WriteLine(new string('─', 60));
 await ReportWriter.WriteAsync(log, outputDir, duration, model);
 
