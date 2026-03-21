@@ -17,3 +17,14 @@ bridge/test-results.json
 bridge/screenshot.png
 bridge/artifacts/
 bridge/debug_*.png
+
+# Copilot agent build & test artifacts
+copilot-agent/bin/
+copilot-agent/obj/
+copilot-agent/output/
+copilot-agent/verify-*/
+copilot-agent/test-run/
+copilot-agent/results.tsv
+
+# Claude local config
+.claude/
