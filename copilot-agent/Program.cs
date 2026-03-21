@@ -6,7 +6,7 @@ using VampireMini.CopilotAgent.Tools;
 // ── CLI Arguments ────────────────────────────────────────────────
 var bridgeUrl = GetArg("--bridge-url", "http://127.0.0.1:9901");
 var duration = int.Parse(GetArg("--duration", "60"));
-var model = GetArg("--model", "gpt-4.1");
+var model = GetArg("--model", "gpt-5.4");
 var outputDir = GetArg("--output", "./output");
 var gameSourceDir = GetArg("--game-source",
     @"C:\lunar-horse\contract-projects\vampire-mini\project\hosts\complete-app");
