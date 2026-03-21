@@ -108,7 +108,12 @@ async function main() {
     await sleep(1000)
   }
 
-  // Setup: start game, invincibility, timescale
+  // Reset to title screen (in case previous iteration left us in gameplay)
+  console.log('[runner] Resetting to title screen...')
+  try { await httpCmd('scene.title') } catch {}
+  await sleep(2000)
+
+  // Start fresh game via menu flow
   console.log('[runner] Starting game...')
   await httpCmd('ui.click_by_text', { text: 'Classic' }); await sleep(2000)
   await httpCmd('ui.click_by_text', { text: 'Start Run' }); await sleep(2000)

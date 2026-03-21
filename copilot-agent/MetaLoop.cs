@@ -188,7 +188,9 @@ public static class MetaLoop
 
     private static void GitReset()
     {
-        RunCmd("git", "reset", "--hard", "HEAD~1");
+        // Only revert the prompt file — don't nuke the entire repo
+        RunCmd("git", "checkout", "HEAD~1", "--", PromptFile);
+        RunCmd("git", "commit", "-m", "autoresearch: revert prompt (discard)", "--allow-empty");
     }
 
     private static void RunCmd(string cmd, params string[] args)
