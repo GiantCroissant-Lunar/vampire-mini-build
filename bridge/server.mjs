@@ -21,14 +21,21 @@ wss.on('listening', () => {
 });
 
 wss.on('connection', (ws) => {
-  if (gameClient) {
-    console.log('[bridge] Replacing existing game connection');
-    gameClient.close();
+  if (gameClient && gameClient.readyState <= 1) {
+    // Old connection still open — detach it silently, don't close()
+    // Closing triggers the game's reconnect loop which causes the flapping
+    const old = gameClient;
+    old.removeAllListeners();
+    old.on('error', () => {}); // swallow errors on orphaned socket
+    // Let it close naturally via TCP timeout
+    console.log('[bridge] Replacing existing game connection (orphaning old)');
   }
   gameClient = ws;
   console.log('[bridge] Game connected');
 
   ws.on('message', (data) => {
+    // Only process messages from the current active client
+    if (gameClient !== ws) return;
     try {
       const msg = JSON.parse(data.toString());
 
@@ -55,8 +62,11 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    console.log('[bridge] Game disconnected');
-    if (gameClient === ws) gameClient = null;
+    if (gameClient === ws) {
+      console.log('[bridge] Game disconnected');
+      gameClient = null;
+    }
+    // Silently ignore close events from orphaned sockets
   });
 
   ws.on('error', (err) => {
