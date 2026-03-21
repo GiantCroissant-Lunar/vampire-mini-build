@@ -36,24 +36,18 @@ public static class AgentLoop
         log.AddTurn(0, setupResponse);
         Console.WriteLine($"[agent] Setup complete. Starting gameplay loop.");
 
-        // Main loop
-        while (sw.Elapsed.TotalSeconds < durationSeconds)
+        // Main loop — cap at 8 play turns to conserve prompt budget
+        int maxPlayTurns = 8;
+        while (sw.Elapsed.TotalSeconds < durationSeconds && turnNumber < maxPlayTurns)
         {
             turnNumber++;
             var remaining = durationSeconds - (int)sw.Elapsed.TotalSeconds;
             if (remaining <= 0) break;
 
-            var prompt = $"""
-                Turn {turnNumber}. {remaining}s remaining.
-                Observe the game state, then make your next gameplay decisions:
-                - Move in a direction (vary your movement pattern)
-                - Check for and handle any level-up menus
-                - Note anything interesting or buggy
-                """;
-
-            // Take periodic screenshots
-            if (turnNumber % 5 == 0)
-                prompt += "\n- Take a screenshot this turn.";
+            var prompt = $"Turn {turnNumber}/{maxPlayTurns}. {remaining}s left. " +
+                "get_game_state → move_player (vary direction) → get_levelup_options → log_observation. " +
+                (turnNumber % 3 == 0 ? "Take a screenshot. " : "") +
+                (turnNumber % 5 == 0 ? "spawn_enemies(10) for stress test. " : "");
 
             var response = await SendTurn(session, prompt);
             log.AddTurn(turnNumber, response);
@@ -65,33 +59,29 @@ public static class AgentLoop
                 await Task.Delay((int)(2000 - turnTime));
         }
 
-        // Phase 2: Investigate & Fix
+        // Phase 2: Investigate & Fix (budget-conscious — max 20 tool calls)
         Console.WriteLine($"[agent] Phase 2: Investigating bugs and producing artifacts...");
         var investigatePrompt = """
-            PHASE 2: Investigation mode. You MUST produce structured artifacts.
+            PHASE 2: Investigation. BUDGET: You have ~20 tool calls remaining.
+            Be surgical — don't read every file. Target only files you identified during play.
 
-            For EACH bug you observed during gameplay, do ALL of these steps:
+            IMPORTANT: Produce artifacts FIRST, investigate SECOND. Do not spend all
+            your budget reading files before creating outputs.
 
-            Step 1: Read the source code to find the root cause
-            Step 2: Call `report_bug` with severity, repro steps, code location, root cause
-            Step 3: Call `create_code_diff` with a unified diff patch (--- a/ +++ b/ format)
-            Step 4: Call `create_resource_manifest` if assets need changes
-            Step 5: Call `log_observation` with level="error" for each confirmed bug
+            For your TOP 2 bugs (most impactful):
+            1. Read ONLY the specific file+lines you suspect (1-2 reads max per bug)
+            2. IMMEDIATELY call `report_bug` with what you know
+            3. Call `create_code_diff` if you can write a fix
+            4. Call `log_observation` level="error" for each
 
-            If you noticed missing sprites or textures, create a resource manifest.
-            Take a final screenshot and get final game state.
-
-            Priority order: critical bugs first, then major, then minor.
-
-            After ALL bugs are filed with artifacts, write a summary listing:
+            Then write your summary:
             - Stats: level, kills, weapons, passives
-            - Bugs filed: list each bugs/*.json filename
-            - Patches created: list each diffs/*.patch filename
-            - Resource manifests: list each manifests/*.json filename
-            - Remaining issues that need manual attention
+            - Bugs filed: list filenames
+            - Patches created: list filenames
+            - Remaining issues for next session
             """;
 
-        var summary = await SendTurn(session, investigatePrompt, timeoutSeconds: 300);
+        var summary = await SendTurn(session, investigatePrompt, timeoutSeconds: 120);
         log.Summary = summary;
 
         // Capture final state

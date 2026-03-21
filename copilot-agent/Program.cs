@@ -5,7 +5,7 @@ using VampireMini.CopilotAgent.Tools;
 
 // ── CLI Arguments ────────────────────────────────────────────────
 var bridgeUrl = GetArg("--bridge-url", "http://127.0.0.1:9901");
-var duration = int.Parse(GetArg("--duration", "180"));
+var duration = int.Parse(GetArg("--duration", "120"));
 var model = GetArg("--model", "gpt-5.4");
 var outputDir = GetArg("--output", "./output");
 var gameSourceDir = GetArg("--game-source",
