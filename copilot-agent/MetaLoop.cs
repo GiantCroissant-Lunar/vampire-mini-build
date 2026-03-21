@@ -142,10 +142,11 @@ public static class MetaLoop
     {
         Directory.CreateDirectory(outputDir);
 
+        // Use deterministic Node.js runner — zero LLM calls
         var psi = new ProcessStartInfo
         {
-            FileName = "dotnet",
-            Arguments = $"run --project . -- --duration {duration} --prompt {PromptFile} --output {outputDir}",
+            FileName = "node",
+            Arguments = $"runner.mjs --duration {duration} --prompt {PromptFile} --output {outputDir}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -154,7 +155,6 @@ public static class MetaLoop
         using var proc = Process.Start(psi);
         if (proc == null) return -1;
 
-        // Stream output
         _ = Task.Run(async () =>
         {
             while (!proc.StandardOutput.EndOfStream)
