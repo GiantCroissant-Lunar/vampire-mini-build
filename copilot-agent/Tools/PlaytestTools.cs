@@ -10,6 +10,8 @@ namespace VampireMini.CopilotAgent.Tools;
 /// </summary>
 public static class PlaytestTools
 {
+    private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
+
     public static AIFunction[] Create(BridgeHttpClient bridge, string outputDir)
     {
         return
@@ -20,7 +22,7 @@ public static class PlaytestTools
                 async () =>
                 {
                     var state = await bridge.GetStateAsync();
-                    return JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
+                    return JsonSerializer.Serialize(state, IndentedJson);
                 },
                 "get_game_state",
                 "Get the current game state: player HP/level/position, weapons, enemies alive/killed, wave info."),
@@ -106,7 +108,7 @@ public static class PlaytestTools
                 async () =>
                 {
                     await bridge.NavigateMenuFlowAsync();
-                    return "Game started via menu flow (Classic → Start Run → Normal → Start Run)";
+                    return "Game started via menu flow (Classic -> Start Run -> Normal -> Start Run)";
                 },
                 "start_game",
                 "Navigate the menu and start a new game session."),
@@ -154,43 +156,119 @@ public static class PlaytestTools
                 "get_ui_scene",
                 "Get info about the current scene (title screen, gameplay, etc)."),
 
-            // ── Code Diff (artifact output) ──────────────────────────
+            // ══════════════════════════════════════════════════════════
+            //  ARTIFACT TOOLS — output structured data for refinement
+            // ══════════════════════════════════════════════════════════
+
+            // ── Bug Report ───────────────────────────────────────────
+
+            AIFunctionFactory.Create(
+                (
+                    [Description("Bug title (e.g. 'Invincibility does not prevent contact damage')")] string title,
+                    [Description("critical | major | minor | cosmetic")] string severity,
+                    [Description("Affected system: player, weapons, enemies, ui, camera, spawner, progression, audio, visual")] string system,
+                    [Description("Step-by-step reproduction instructions")] string reproSteps,
+                    [Description("What actually happened")] string actual,
+                    [Description("What should have happened")] string expected,
+                    [Description("File path and line number of the root cause (e.g. Scripts/Player/PlayerHealth.cs:29)")] string codeLocation,
+                    [Description("Technical explanation of why this happens")] string rootCause
+                ) =>
+                {
+                    var bugsDir = Path.Combine(outputDir, "bugs");
+                    Directory.CreateDirectory(bugsDir);
+                    var slug = title.ToLowerInvariant().Replace(' ', '-').Replace("'", "");
+                    if (slug.Length > 50) slug = slug[..50];
+                    var filename = $"{slug}.json";
+
+                    var bug = new
+                    {
+                        title, severity, system, reproSteps, actual, expected,
+                        codeLocation, rootCause,
+                        timestamp = DateTime.UtcNow.ToString("u"),
+                        agent = "copilot-playtest"
+                    };
+                    File.WriteAllText(
+                        Path.Combine(bugsDir, filename),
+                        JsonSerializer.Serialize(bug, IndentedJson));
+                    return $"Bug report saved: bugs/{filename}";
+                },
+                "report_bug",
+                "File a structured bug report with severity, repro steps, root cause, and code location. Use after investigating an issue in the source code."),
+
+            // ── Code Diff ────────────────────────────────────────────
 
             AIFunctionFactory.Create(
                 (
                     [Description("Short title for the fix (e.g. 'fix-invincibility')")] string title,
-                    [Description("The unified diff content (standard patch format)")] string diffContent,
-                    [Description("Description of what this diff fixes and why")] string description
+                    [Description("The unified diff content (standard patch format with --- a/ and +++ b/ headers)")] string diffContent,
+                    [Description("What this diff fixes and why")] string description,
+                    [Description("critical | major | minor")] string priority,
+                    [Description("Affected systems (comma-separated: player, weapons, enemies, etc.)")] string affectedSystems,
+                    [Description("How to verify this fix works (test steps)")] string verificationSteps
                 ) =>
                 {
                     var diffDir = Path.Combine(outputDir, "diffs");
                     Directory.CreateDirectory(diffDir);
                     var filename = $"{title}.patch";
-                    var path = Path.Combine(diffDir, filename);
 
-                    var header = $"# {title}\n# {description}\n# Generated by Copilot playtest agent at {DateTime.UtcNow:u}\n\n";
-                    File.WriteAllText(path, header + diffContent);
-                    return $"Diff saved: diffs/{filename}";
+                    var metadata = new
+                    {
+                        title, description, priority, affectedSystems,
+                        verificationSteps,
+                        timestamp = DateTime.UtcNow.ToString("u"),
+                        agent = "copilot-playtest"
+                    };
+                    // Write metadata sidecar
+                    File.WriteAllText(
+                        Path.Combine(diffDir, $"{title}.meta.json"),
+                        JsonSerializer.Serialize(metadata, IndentedJson));
+                    // Write the actual patch
+                    File.WriteAllText(Path.Combine(diffDir, filename), diffContent);
+                    return $"Diff saved: diffs/{filename} (+ {title}.meta.json)";
                 },
                 "create_code_diff",
-                "Create a .patch file with a proposed code fix. Use unified diff format. The diff will be saved as an artifact for human review and application."),
+                "Create a .patch file with a proposed code fix plus a metadata sidecar (.meta.json) with priority, affected systems, and verification steps."),
 
-            // ── Resource Manifest ─────────────────────────────────────
+            // ── Resource Manifest ────────────────────────────────────
 
             AIFunctionFactory.Create(
                 (
-                    [Description("JSON array of resource actions. Each entry: {\"action\":\"add|remove|update\", \"type\":\"scene|script|texture|shader|resource\", \"path\":\"res://...\", \"reason\":\"why this change is needed\"}")] string manifestJson
+                    [Description("JSON array of resource actions. Each entry: {\"action\":\"add|remove|update\", \"type\":\"scene|script|texture|shader|resource|audio\", \"path\":\"res://...\", \"priority\":\"critical|high|medium|low\", \"reason\":\"why\", \"depends_on\":\"optional dependency path\"}")] string manifestJson
                 ) =>
                 {
                     var manifestDir = Path.Combine(outputDir, "manifests");
                     Directory.CreateDirectory(manifestDir);
                     var filename = $"resources_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
-                    var path = Path.Combine(manifestDir, filename);
-                    File.WriteAllText(path, manifestJson);
+                    File.WriteAllText(Path.Combine(manifestDir, filename), manifestJson);
                     return $"Resource manifest saved: manifests/{filename}";
                 },
                 "create_resource_manifest",
-                "Create a JSON manifest of resources (scenes, textures, scripts, shaders) that need to be added, removed, or updated. Use when you notice missing sprites, broken scene references, or needed asset changes."),
+                "Create a JSON manifest of resources that need to be added, removed, or updated. Include priority and dependencies."),
+
+            // ── Session Log Entry ────────────────────────────────────
+
+            AIFunctionFactory.Create(
+                (
+                    [Description("Log level: info | warn | error | observation")] string level,
+                    [Description("Log message describing what happened")] string message,
+                    [Description("Optional: affected system (player, weapons, enemies, ui, etc.)")] string system,
+                    [Description("Optional: game state snapshot as JSON")] string stateJson
+                ) =>
+                {
+                    var logPath = Path.Combine(outputDir, "session.jsonl");
+                    var entry = new
+                    {
+                        timestamp = DateTime.UtcNow.ToString("u"),
+                        level,
+                        message,
+                        system = string.IsNullOrEmpty(system) ? null : system,
+                        state = string.IsNullOrEmpty(stateJson) ? null : stateJson
+                    };
+                    File.AppendAllText(logPath, JsonSerializer.Serialize(entry) + "\n");
+                    return $"Logged: [{level}] {message}";
+                },
+                "log_observation",
+                "Write a structured log entry to session.jsonl. Use for observations, warnings, errors, or interesting gameplay moments. Logs are machine-readable for CI analysis."),
 
             // ── Escape Hatch ─────────────────────────────────────────
 
