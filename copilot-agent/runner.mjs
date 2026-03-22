@@ -161,7 +161,7 @@ async function main() {
   let gameReady = false
   for (let i = 0; i < 20; i++) {
     const s = await getStateRetry(2)
-    if (s && s.player && s.player.hp > 0) { gameReady = true; break }
+    if (s && s.player && typeof s.player.hp === 'number') { gameReady = true; break }
     // While waiting, try clicking Normal in case difficulty screen appeared
     if (i === 5 || i === 10) {
       try { await httpCmd('ui.click_by_text', { text: 'Normal' }) } catch {}
@@ -184,7 +184,7 @@ async function main() {
     await sleep(5000)
     for (let i = 0; i < 10; i++) {
       const s = await getStateRetry(2)
-      if (s && s.player && s.player.hp > 0) { gameReady = true; break }
+      if (s && s.player && typeof s.player.hp === 'number') { gameReady = true; break }
       await sleep(1000)
     }
   }
