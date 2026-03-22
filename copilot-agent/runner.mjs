@@ -135,28 +135,52 @@ async function main() {
   // Reset to title screen then navigate menus
   console.log('[runner] Resetting to title screen...')
   try { await httpCmd('scene.title') } catch {}
-  await sleep(3000)
+  await sleep(4000)
 
-  // Navigate: Classic → Normal difficulty
+  // Navigate: Classic → Normal difficulty (retry each click until it succeeds)
   console.log('[runner] Starting game via menu flow...')
-  try { await httpCmd('ui.click_by_text', { text: 'Classic' }) } catch {}
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const r = await httpCmd('ui.click_by_text', { text: 'Classic' })
+      if (r?.value?.clicked) { console.log('[runner] Clicked Classic'); break }
+    } catch {}
+    await sleep(2000)
+  }
   await sleep(3000)
-  try { await httpCmd('ui.click_by_text', { text: 'Normal' }) } catch {}
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const r = await httpCmd('ui.click_by_text', { text: 'Normal' })
+      if (r?.value?.clicked) { console.log('[runner] Clicked Normal'); break }
+    } catch {}
+    await sleep(2000)
+  }
   await sleep(5000)
 
   // Wait for gameplay to actually start — retry until valid state
-  // Wait for player to spawn — scene transitions can take time
   console.log('[runner] Waiting for gameplay...')
   let gameReady = false
   for (let i = 0; i < 20; i++) {
     const s = await getStateRetry(2)
     if (s && s.player && s.player.hp > 0) { gameReady = true; break }
+    // While waiting, try clicking Normal in case difficulty screen appeared
+    if (i === 5 || i === 10) {
+      try { await httpCmd('ui.click_by_text', { text: 'Normal' }) } catch {}
+    }
     await sleep(1000)
   }
   if (!gameReady) {
-    // Fallback: try scene.start_game directly
+    // Fallback: try scene.start_game directly (goes to Main.tscn → DifficultySelectScreen)
     console.log('[runner] Menu flow failed, trying scene.start_game...')
     try { await httpCmd('scene.start_game') } catch {}
+    await sleep(4000)
+    // Click Normal on the difficulty screen
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const r = await httpCmd('ui.click_by_text', { text: 'Normal' })
+        if (r?.value?.clicked) { console.log('[runner] Clicked Normal (fallback)'); break }
+      } catch {}
+      await sleep(2000)
+    }
     await sleep(5000)
     for (let i = 0; i < 10; i++) {
       const s = await getStateRetry(2)
